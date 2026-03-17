@@ -1,0 +1,6 @@
+# PodDistill — Podcast Registry
+# Add podcast names here. Sources (RSS + YouTube) are auto-resolved on first run.
+podcasts:
+  - name: Lex Fridman Podcast
+  - name: My First Million
+  - name: Huberman Lab
