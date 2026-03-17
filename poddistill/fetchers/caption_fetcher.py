@@ -66,6 +66,7 @@ def fetch_captions_ytdlp(video_url: str, lang: str = "en") -> str:
             "--output", output_template,
             "--no-playlist",
             "--quiet",
+            "--js-runtimes", "node",
             video_url,
         ]
 
@@ -137,6 +138,7 @@ def get_latest_video_url(channel_url: str) -> str:
         "--print", "url",
         "--no-warnings",
         "--quiet",
+        "--js-runtimes", "node",
         channel_url,
     ]
 
