@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_API_VERSION = "2023-06-01"
-DEFAULT_MODEL = "claude-3-5-haiku-20241022"
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 MAX_TOKENS = 1024
 
 
@@ -111,7 +111,7 @@ def summarize_chunks(
                   - startSeconds (int): Chapter start time
                   - text (str): Transcript text for this chapter
         api_key: Anthropic API key.
-        model: Claude model to use (default: claude-3-5-haiku-20241022).
+        model: Claude model to use (default: claude-haiku-4-5-20251001).
 
     Returns:
         List of dicts with keys:
