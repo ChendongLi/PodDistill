@@ -1,0 +1,34 @@
+# Cloud Scheduler configuration for PodDistill
+#
+# Runs the PodDistill pipeline daily at 8:00 AM UTC.
+#
+# Deploy with:
+#   gcloud scheduler jobs create http poddistill-daily \
+#     --schedule="0 8 * * *" \
+#     --uri="https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/YOUR_PROJECT_ID/jobs/poddistill-job:run" \
+#     --http-method=POST \
+#     --oauth-service-account-email=poddistill-scheduler@YOUR_PROJECT_ID.iam.gserviceaccount.com \
+#     --location=us-central1 \
+#     --time-zone=UTC \
+#     --description="Daily PodDistill podcast summarization run"
+#
+# Required IAM: scheduler SA needs roles/run.invoker on the Cloud Run Job.
+
+name: poddistill-daily
+description: Daily PodDistill podcast summarization pipeline
+schedule: "0 8 * * *"
+timeZone: UTC
+
+# Cloud Run Job trigger
+httpTarget:
+  uri: "https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/YOUR_PROJECT_ID/jobs/poddistill-job:run"
+  httpMethod: POST
+  oauthToken:
+    serviceAccountEmail: "poddistill-scheduler@YOUR_PROJECT_ID.iam.gserviceaccount.com"
+
+retryConfig:
+  retryCount: 1
+  minBackoffDuration: 5s
+  maxBackoffDuration: 3600s
+
+attemptDeadline: 1800s  # 30 minute max runtime
