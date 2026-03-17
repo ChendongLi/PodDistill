@@ -1,0 +1,55 @@
+# Cloud Build configuration for PodDistill
+# Builds and pushes Docker image to Artifact Registry, then deploys as Cloud Run Job.
+#
+# Trigger: Push to main branch
+# Required substitutions:
+#   _PROJECT_ID    — GCP project ID
+#   _REGION        — GCP region (e.g. us-central1)
+#   _IMAGE         — Docker image name (e.g. poddistill)
+#   _JOB_NAME      — Cloud Run Job name (e.g. poddistill-job)
+
+steps:
+  # Step 1: Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${_PROJECT_ID}/poddistill/${_IMAGE}:$COMMIT_SHA'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${_PROJECT_ID}/poddistill/${_IMAGE}:latest'
+      - '.'
+
+  # Step 2: Push image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '${_REGION}-docker.pkg.dev/${_PROJECT_ID}/poddistill/${_IMAGE}'
+
+  # Step 3: Deploy/update Cloud Run Job
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'jobs'
+      - 'update'
+      - '${_JOB_NAME}'
+      - '--image'
+      - '${_REGION}-docker.pkg.dev/${_PROJECT_ID}/poddistill/${_IMAGE}:$COMMIT_SHA'
+      - '--region'
+      - '${_REGION}'
+      - '--set-secrets'
+      - 'ANTHROPIC_API_KEY=anthropic-api-key:latest,AGENTMAIL_API_KEY=agentmail-api-key:latest'
+
+substitutions:
+  _PROJECT_ID: 'your-gcp-project-id'
+  _REGION: 'us-central1'
+  _IMAGE: 'poddistill'
+  _JOB_NAME: 'poddistill-job'
+
+images:
+  - '${_REGION}-docker.pkg.dev/${_PROJECT_ID}/poddistill/${_IMAGE}:$COMMIT_SHA'
+  - '${_REGION}-docker.pkg.dev/${_PROJECT_ID}/poddistill/${_IMAGE}:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
