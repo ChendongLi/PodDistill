@@ -1,8 +1,19 @@
 # PodDistill — Podcast Registry
-# Add podcast names here. Sources (RSS + YouTube) are auto-resolved on first run.
+# Sources (RSS + YouTube) are auto-resolved on first run via iTunes + YouTube search.
 podcasts:
-  - name: Lex Fridman Podcast
-  - name: My First Million
-  - name: Huberman Lab
-  - name: Bloomberg Brief
-    youtube_playlist: PLGaYlBJIOoa_vIH-o9MQZHg86xdx496BW
+  # Bloomberg
+  - name: Bloomberg The Opening Trade
+  - name: Bloomberg The Close
+  - name: Bloomberg Stock Movers
+  - name: Bloomberg Businessweek
+  - name: Bloomberg Daybreak
+  - name: Bloomberg Technology
+  - name: Bloomberg Intelligence
+
+  # Goldman Sachs
+  - name: Goldman Sachs Exchanges
+  - name: Goldman Sachs The Markets
+  - name: Goldman Sachs Talks at GS
+
+  # Morgan Stanley
+  - name: Morgan Stanley Thoughts on the Market
