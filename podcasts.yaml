@@ -1,19 +1,87 @@
 # PodDistill — Podcast Registry
-# Sources (RSS + YouTube) are auto-resolved on first run via iTunes + YouTube search.
+# Each show needs: name, channel_id, keywords, network
+# keywords: list of lowercase title substrings used to find the right episode
+#           within the channel's recent videos (first match wins)
+
 podcasts:
-  # Bloomberg
+  # ── Bloomberg ────────────────────────────────────────────────────────────────
   - name: Bloomberg The Opening Trade
+    network: Bloomberg
+    channel_id: UCIALMKvObZNtJ6AmdCLP7Lg
+    keywords:
+      - the opening trade
+      - opening trade
+
   - name: Bloomberg The Close
+    network: Bloomberg
+    channel_id: UCIALMKvObZNtJ6AmdCLP7Lg
+    keywords:
+      - the close
+
   - name: Bloomberg Stock Movers
+    network: Bloomberg
+    channel_id: UCIALMKvObZNtJ6AmdCLP7Lg
+    keywords:
+      - stock movers
+
   - name: Bloomberg Businessweek
+    network: Bloomberg
+    channel_id: UCIALMKvObZNtJ6AmdCLP7Lg
+    keywords:
+      - businessweek
+
   - name: Bloomberg Daybreak
+    network: Bloomberg
+    channel_id: UCIALMKvObZNtJ6AmdCLP7Lg
+    keywords:
+      - daybreak
+
   - name: Bloomberg Technology
+    network: Bloomberg
+    channel_id: UCIALMKvObZNtJ6AmdCLP7Lg
+    keywords:
+      - bloomberg technology
+      - technology
+
   - name: Bloomberg Intelligence
+    network: Bloomberg
+    channel_id: UCIALMKvObZNtJ6AmdCLP7Lg
+    keywords:
+      - bloomberg intelligence
+      - intelligence
 
-  # Goldman Sachs
+  # ── Goldman Sachs ─────────────────────────────────────────────────────────────
   - name: Goldman Sachs Exchanges
-  - name: Goldman Sachs The Markets
-  - name: Goldman Sachs Talks at GS
+    network: Goldman Sachs
+    channel_id: UCyz6-taovlaOkPsPtK4KNEg
+    keywords:
+      - exchanges
 
-  # Morgan Stanley
+  - name: Goldman Sachs The Markets
+    network: Goldman Sachs
+    channel_id: UCyz6-taovlaOkPsPtK4KNEg
+    keywords:
+      - the markets
+      - market stress
+      - market volatility
+
+  - name: Goldman Sachs Talks at GS
+    network: Goldman Sachs
+    channel_id: UCyz6-taovlaOkPsPtK4KNEg
+    keywords:
+      - talks at gs
+      - talks at
+
+  # ── Morgan Stanley ────────────────────────────────────────────────────────────
   - name: Morgan Stanley Thoughts on the Market
+    network: Morgan Stanley
+    channel_id: UCz6RzD6KG_hH_oHb2kyW5jQ
+    keywords:
+      - thoughts on the market
+
+  # ── CNBC ──────────────────────────────────────────────────────────────────────
+  - name: Mad Money
+    network: CNBC
+    channel_id: UCrp_UI8XtuYfpiqluWLD7Lw
+    keywords:
+      - mad money
