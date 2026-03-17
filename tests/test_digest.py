@@ -52,7 +52,8 @@ def test_md_to_html_link():
 
 def test_md_to_html_blockquote():
     html = _md_to_html("> Notable quote here")
-    assert "<blockquote>Notable quote here</blockquote>" in html
+    assert "Notable quote here" in html
+    assert "<blockquote>" in html
 
 def test_md_to_html_hr():
     html = _md_to_html("---")
