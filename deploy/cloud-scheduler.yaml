@@ -1,34 +1,53 @@
 # Cloud Scheduler configuration for PodDistill
 #
-# Runs the PodDistill pipeline daily at 8:00 AM UTC.
+# Runs twice daily, Monday–Friday only:
+#   - 7:00 AM PT  = 15:00 UTC (14:00 UTC during PDT, Mar–Nov)
+#   - 4:00 PM PT  = 00:00 UTC next day (23:00 UTC during PDT)
 #
-# Deploy with:
-#   gcloud scheduler jobs create http poddistill-daily \
-#     --schedule="0 8 * * *" \
-#     --uri="https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/YOUR_PROJECT_ID/jobs/poddistill-job:run" \
+# Using PDT (UTC-7) as the time zone so Cloud Scheduler handles DST automatically.
+#
+# Deploy commands:
+#
+#   # Morning run — 7am PT Mon-Fri
+#   gcloud scheduler jobs create http poddistill-morning \
+#     --schedule="0 7 * * 1-5" \
+#     --time-zone="America/Los_Angeles" \
+#     --uri="https://REGION-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/PROJECT_ID/jobs/poddistill-job:run" \
 #     --http-method=POST \
-#     --oauth-service-account-email=poddistill-scheduler@YOUR_PROJECT_ID.iam.gserviceaccount.com \
+#     --oauth-service-account-email=poddistill-scheduler@PROJECT_ID.iam.gserviceaccount.com \
 #     --location=us-central1 \
-#     --time-zone=UTC \
-#     --description="Daily PodDistill podcast summarization run"
+#     --description="PodDistill morning run — 7am PT Mon-Fri"
 #
-# Required IAM: scheduler SA needs roles/run.invoker on the Cloud Run Job.
+#   # Afternoon run — 4pm PT Mon-Fri
+#   gcloud scheduler jobs create http poddistill-afternoon \
+#     --schedule="0 16 * * 1-5" \
+#     --time-zone="America/Los_Angeles" \
+#     --uri="https://REGION-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/PROJECT_ID/jobs/poddistill-job:run" \
+#     --http-method=POST \
+#     --oauth-service-account-email=poddistill-scheduler@PROJECT_ID.iam.gserviceaccount.com \
+#     --location=us-central1 \
+#     --description="PodDistill afternoon run — 4pm PT Mon-Fri"
+#
+# Required IAM:
+#   gcloud projects add-iam-policy-binding PROJECT_ID \
+#     --member="serviceAccount:poddistill-scheduler@PROJECT_ID.iam.gserviceaccount.com" \
+#     --role="roles/run.invoker"
 
-name: poddistill-daily
-description: Daily PodDistill podcast summarization pipeline
-schedule: "0 8 * * *"
-timeZone: UTC
+jobs:
+  - name: poddistill-morning
+    description: "PodDistill morning run — 7:00 AM PT, Mon–Fri"
+    schedule: "0 7 * * 1-5"
+    timeZone: "America/Los_Angeles"
+    attemptDeadline: 1800s
+    retryConfig:
+      retryCount: 1
+      minBackoffDuration: 30s
 
-# Cloud Run Job trigger
-httpTarget:
-  uri: "https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/YOUR_PROJECT_ID/jobs/poddistill-job:run"
-  httpMethod: POST
-  oauthToken:
-    serviceAccountEmail: "poddistill-scheduler@YOUR_PROJECT_ID.iam.gserviceaccount.com"
-
-retryConfig:
-  retryCount: 1
-  minBackoffDuration: 5s
-  maxBackoffDuration: 3600s
-
-attemptDeadline: 1800s  # 30 minute max runtime
+  - name: poddistill-afternoon
+    description: "PodDistill afternoon run — 4:00 PM PT, Mon–Fri"
+    schedule: "0 16 * * 1-5"
+    timeZone: "America/Los_Angeles"
+    attemptDeadline: 1800s
+    retryConfig:
+      retryCount: 1
+      minBackoffDuration: 30s
