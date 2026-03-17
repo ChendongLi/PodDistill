@@ -11,10 +11,21 @@ podcasts.yaml → [registry] → [update checker] → [caption fetcher / whisper
                                                         ↓
                                               [caption cleaner]
                                                         ↓
+                                              [chunker (by chapter)]
+                                                        ↓
                                               [Claude summarizer]
+                                                        ↓
+                                    [formatter (timestamp deep-links)]
                                                         ↓
                                     [GCS storage] + [email digest]
 ```
+
+## Modules
+
+| Module | Location | Description |
+|--------|----------|-------------|
+| Registry | `poddistill/fetchers/registry.py` | Loads `podcasts.yaml`, auto-discovers RSS + YouTube sources, caches in `registry.json` |
+| Update Checker | `poddistill/fetchers/update_checker.py` | Tracks last-seen episode per podcast in `state.json`; skips already-processed episodes |
 
 ## Setup
 
@@ -25,9 +36,23 @@ pip install -r requirements.txt
 python main.py
 ```
 
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | Yes | Claude API key for summarization |
+| `OPENAI_API_KEY` | No | OpenAI Whisper API key (fallback transcription) |
+| `GCS_BUCKET` | No | Google Cloud Storage bucket for archiving |
+| `AGENTMAIL_API_KEY` | No | AgentMail key for email digest |
+| `DIGEST_RECIPIENT` | No | Email address to send digest to |
+
 ## Config
 
 Add podcasts to `podcasts.yaml`. Sources (RSS feed + YouTube channel) are auto-resolved on first run and cached in `registry.json`.
+
+## State
+
+`state.json` tracks the last processed episode per podcast. This file is **not committed** — it persists between runs on the host.
 
 ## Deployment
 

@@ -1,7 +1,6 @@
 .env
 *.json
 !podcasts.yaml
-!registry.json
 __pycache__/
 *.pyc
 .venv/
