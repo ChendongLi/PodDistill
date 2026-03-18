@@ -70,7 +70,7 @@ def process_podcast_transcriptapi(
     Process a single podcast using TranscriptAPI as the transcript source.
 
     Args:
-        podcast: Dict with keys: name, channel_id, keywords, network, first_match
+        podcast: Dict with keys: name, channel_id, playlist_id, keywords, network, first_match
         state: Mutable state dict for dedup tracking
         transcript_api_key: TranscriptAPI.com key
         anthropic_api_key: Anthropic Claude key
@@ -81,25 +81,28 @@ def process_podcast_transcriptapi(
     """
     name = podcast["name"]
     channel_id = podcast.get("channel_id")
+    playlist_id = podcast.get("playlist_id")
     keywords = podcast.get("keywords", [])
     first_match = podcast.get("first_match", False)
     network = podcast.get("network", "")
 
-    if not channel_id:
-        log.warning("Skipping %s — missing channel_id", name)
-        return None
-
-    if not first_match and not keywords:
-        log.warning("Skipping %s — missing keywords (and first_match not set)", name)
+    if not channel_id and not playlist_id:
+        log.warning("Skipping %s — missing channel_id and playlist_id", name)
         return None
 
     fetcher = TranscriptFetcher(api_key=transcript_api_key)
 
-    # Find latest matching episode
-    if first_match:
+    # Find latest episode: playlist takes priority over channel search
+    if playlist_id:
+        log.info("[%s] Looking for latest episode in playlist %s", name, playlist_id)
+        video_id, ep_title = fetcher.find_latest_from_playlist(playlist_id)
+    elif first_match:
         log.info("[%s] Looking for latest episode (first_match=True)", name)
         video_id, ep_title = fetcher.find_latest_episode(channel_id, first_match=True)
     else:
+        if not keywords:
+            log.warning("Skipping %s — missing keywords (and first_match not set)", name)
+            return None
         log.info("[%s] Looking for latest episode (keywords=%s)", name, keywords)
         video_id, ep_title = fetcher.find_latest_episode(channel_id, keywords)
 
@@ -201,7 +204,7 @@ def main():
         name = podcast.get("name", "?")
         try:
             # TranscriptAPI path (primary — all shows with channel_id + keywords or first_match)
-            if transcript_api_key and podcast.get("channel_id"):
+            if transcript_api_key and (podcast.get("channel_id") or podcast.get("playlist_id")):
                 result = process_podcast_transcriptapi(
                     podcast=podcast,
                     state=state,

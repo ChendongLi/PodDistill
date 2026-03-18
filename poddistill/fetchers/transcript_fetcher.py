@@ -81,6 +81,58 @@ class TranscriptFetcher:
         data = self._get("channel/videos", {"channel": channel_id}, DEFAULT_TIMEOUT_CHANNEL)
         return data.get("results", [])
 
+    def get_playlist_videos(self, playlist_id: str) -> list[dict[str, Any]]:
+        """Return up to 100 recent videos from a YouTube playlist."""
+        data = self._get("playlist/videos", {"playlist": playlist_id}, DEFAULT_TIMEOUT_CHANNEL)
+        return data.get("results", [])
+
+    def find_latest_from_playlist(
+        self,
+        playlist_id: str,
+        min_duration_seconds: int = MIN_DURATION_SECONDS,
+    ) -> tuple[str, str] | tuple[None, None]:
+        """
+        Return the most recent video from a playlist that meets the duration threshold.
+
+        Skips #Shorts. Falls back to first non-Shorts video if none meets the threshold.
+
+        Args:
+            playlist_id: YouTube playlist ID (starts with PL...).
+            min_duration_seconds: Minimum episode duration to accept.
+
+        Returns:
+            (video_id, title) or (None, None) if playlist is empty.
+        """
+        videos = self.get_playlist_videos(playlist_id)
+
+        # First pass: respect duration filter
+        for video in videos:
+            title = video.get("title", "")
+            if "#shorts" in title.lower():
+                continue
+            dur_text = video.get("lengthText", "")
+            if dur_text:
+                total = _parse_duration(dur_text)
+                if total is not None and total < min_duration_seconds:
+                    continue
+            return video["videoId"], title
+
+        # Second pass: skip duration filter
+        for video in videos:
+            title = video.get("title", "")
+            if "#shorts" in title.lower():
+                continue
+            log.warning(
+                "find_latest_from_playlist: returning video without duration filter "
+                "(playlist=%s, video=%s, title=%s)",
+                playlist_id,
+                video["videoId"],
+                title[:60],
+            )
+            return video["videoId"], title
+
+        return None, None
+
     def find_latest_episode(
         self,
         channel_id: str,
