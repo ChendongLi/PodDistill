@@ -5,58 +5,13 @@
 
 podcasts:
   # ── Bloomberg ────────────────────────────────────────────────────────────────
-  - name: Bloomberg The Opening Trade
-    network: Bloomberg
-    channel_id: UCIALMKvObZNtJ6AmdCLP7Lg
-    keywords:
-      - the opening trade
-      - opening trade
-
-  - name: Bloomberg The Close
-    network: Bloomberg
-    channel_id: UCIALMKvObZNtJ6AmdCLP7Lg
-    keywords:
-      - the close
-
-  - name: Bloomberg Stock Movers
-    network: Bloomberg
-    channel_id: UCIALMKvObZNtJ6AmdCLP7Lg
-    keywords:
-      - stock movers
-
   - name: Bloomberg Businessweek
     network: Bloomberg
     channel_id: UCIALMKvObZNtJ6AmdCLP7Lg
     keywords:
       - businessweek
 
-  - name: Bloomberg Daybreak
-    network: Bloomberg
-    channel_id: UCIALMKvObZNtJ6AmdCLP7Lg
-    keywords:
-      - daybreak
-
-  - name: Bloomberg Technology
-    network: Bloomberg
-    channel_id: UCIALMKvObZNtJ6AmdCLP7Lg
-    keywords:
-      - bloomberg technology
-      - technology
-
-  - name: Bloomberg Intelligence
-    network: Bloomberg
-    channel_id: UCIALMKvObZNtJ6AmdCLP7Lg
-    keywords:
-      - bloomberg intelligence
-      - intelligence
-
   # ── Goldman Sachs ─────────────────────────────────────────────────────────────
-  - name: Goldman Sachs Exchanges
-    network: Goldman Sachs
-    channel_id: UCyz6-taovlaOkPsPtK4KNEg
-    keywords:
-      - exchanges
-
   - name: Goldman Sachs The Markets
     network: Goldman Sachs
     channel_id: UCyz6-taovlaOkPsPtK4KNEg
@@ -64,13 +19,6 @@ podcasts:
       - the markets
       - market stress
       - market volatility
-
-  - name: Goldman Sachs Talks at GS
-    network: Goldman Sachs
-    channel_id: UCyz6-taovlaOkPsPtK4KNEg
-    keywords:
-      - talks at gs
-      - talks at
 
   # ── Morgan Stanley ────────────────────────────────────────────────────────────
   - name: Morgan Stanley Thoughts on the Market
