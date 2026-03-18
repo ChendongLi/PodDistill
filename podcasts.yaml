@@ -29,6 +29,4 @@ podcasts:
   # ── CNBC ──────────────────────────────────────────────────────────────────────
   - name: Mad Money
     network: CNBC
-    channel_id: UCrp_UI8XtuYfpiqluWLD7Lw
-    keywords:
-      - mad money
+    playlist_id: PLVbP054jv0KoZTJ1dUe3igU7K-wUcQsCI
