@@ -12,18 +12,34 @@ Pipeline:
     7. Upload to GCS (if configured)
     8. Send email digest via AgentMail
 """
+
 from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
+import yaml  # type: ignore
 from dotenv import load_dotenv
 
+from poddistill.email.digest import DigestError, send_digest
+from poddistill.fetchers.transcript_fetcher import TranscriptFetcher, TranscriptFetchError
+from poddistill.fetchers.update_checker import (
+    is_new_episode,
+    load_state,
+    mark_processed,
+    save_state,
+)
+from poddistill.storage.gcs import StorageError, episode_gcs_paths, upload_to_gcs
+from poddistill.summarizer.claude_summarizer import SummarizerError, summarize_chunks
+from poddistill.summarizer.formatter import format_summary_with_links
+
 load_dotenv()
+
+log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, log_level, logging.INFO),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 log = logging.getLogger(__name__)
@@ -38,7 +54,6 @@ def _get_env(key: str, required: bool = False) -> str | None:
 
 def _load_podcasts_yaml(path: Path) -> list[dict]:
     """Load podcasts.yaml and return list of podcast dicts."""
-    import yaml  # type: ignore
     with open(path) as f:
         data = yaml.safe_load(f)
     return data.get("podcasts", [])
@@ -55,7 +70,7 @@ def process_podcast_transcriptapi(
     Process a single podcast using TranscriptAPI as the transcript source.
 
     Args:
-        podcast: Dict with keys: name, channel_id, keywords, network
+        podcast: Dict with keys: name, channel_id, keywords, network, first_match
         state: Mutable state dict for dedup tracking
         transcript_api_key: TranscriptAPI.com key
         anthropic_api_key: Anthropic Claude key
@@ -64,24 +79,30 @@ def process_podcast_transcriptapi(
     Returns:
         Episode result dict or None if skipped/errored.
     """
-    from poddistill.fetchers.transcript_fetcher import TranscriptFetcher, TranscriptFetchError
-    from poddistill.fetchers.update_checker import is_new_episode, mark_processed
-    from poddistill.summarizer.claude_summarizer import summarize_chunks, SummarizerError
-
     name = podcast["name"]
     channel_id = podcast.get("channel_id")
     keywords = podcast.get("keywords", [])
+    first_match = podcast.get("first_match", False)
     network = podcast.get("network", "")
 
-    if not channel_id or not keywords:
-        log.warning("Skipping %s — missing channel_id or keywords", name)
+    if not channel_id:
+        log.warning("Skipping %s — missing channel_id", name)
+        return None
+
+    if not first_match and not keywords:
+        log.warning("Skipping %s — missing keywords (and first_match not set)", name)
         return None
 
     fetcher = TranscriptFetcher(api_key=transcript_api_key)
 
     # Find latest matching episode
-    log.info("[%s] Looking for latest episode (keywords=%s)", name, keywords)
-    video_id, ep_title = fetcher.find_latest_episode(channel_id, keywords)
+    if first_match:
+        log.info("[%s] Looking for latest episode (first_match=True)", name)
+        video_id, ep_title = fetcher.find_latest_episode(channel_id, first_match=True)
+    else:
+        log.info("[%s] Looking for latest episode (keywords=%s)", name, keywords)
+        video_id, ep_title = fetcher.find_latest_episode(channel_id, keywords)
+
     if not video_id:
         log.warning("[%s] No matching episode found in recent channel videos", name)
         return None
@@ -117,11 +138,13 @@ def process_podcast_transcriptapi(
     yt_url = f"https://youtube.com/watch?v={video_id}"
     prompt_context = f"Show: {name} ({network})\nEpisode: {ep_title}\nVideo: {yt_url}\n\n"
 
-    chunks = [{
-        "title": ep_title,
-        "text": prompt_context + transcript_text,
-        "start_time": 0,
-    }]
+    chunks = [
+        {
+            "title": ep_title,
+            "text": prompt_context + transcript_text,
+            "start_time": 0,
+        }
+    ]
 
     try:
         summarized = summarize_chunks(chunks, api_key=anthropic_api_key)
@@ -129,13 +152,11 @@ def process_podcast_transcriptapi(
         log.error("[%s] Summarization failed: %s", name, e)
         return None
 
-    from poddistill.summarizer.formatter import format_summary_with_links
     final_markdown = format_summary_with_links(summarized, video_id)
 
     # GCS upload (optional)
     if gcs_bucket:
-        from poddistill.storage.gcs import upload_to_gcs, episode_gcs_paths, StorageError
-        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        date_str = datetime.now(UTC).strftime("%Y-%m-%d")
         slug = name.lower().replace(" ", "-").replace("/", "-")
         paths = episode_gcs_paths(date_str, slug, video_id)
         try:
@@ -172,7 +193,6 @@ def main():
     podcasts = _load_podcasts_yaml(podcasts_config)
     log.info("Loaded %d podcasts from %s", len(podcasts), podcasts_config)
 
-    from poddistill.fetchers.update_checker import load_state, save_state
     state = load_state()
     episodes_processed = []
 
@@ -180,7 +200,7 @@ def main():
     for podcast in podcasts:
         name = podcast.get("name", "?")
         try:
-            # TranscriptAPI path (primary — all shows with channel_id + keywords)
+            # TranscriptAPI path (primary — all shows with channel_id + keywords or first_match)
             if transcript_api_key and podcast.get("channel_id"):
                 result = process_podcast_transcriptapi(
                     podcast=podcast,
@@ -201,7 +221,6 @@ def main():
 
     # Send digest
     if episodes_processed and agentmail_api_key and digest_recipient:
-        from poddistill.email.digest import send_digest, DigestError
         try:
             sent = send_digest(
                 episodes=episodes_processed,
@@ -209,11 +228,16 @@ def main():
                 api_key=agentmail_api_key,
             )
             if sent:
-                log.info("Digest sent to %s (%d episodes)", digest_recipient, len(episodes_processed))
+                log.info(
+                    "Digest sent to %s (%d episodes)", digest_recipient, len(episodes_processed)
+                )
         except DigestError as e:
             log.error("Failed to send digest: %s", e)
     elif episodes_processed:
-        log.info("Processed %d episodes — AGENTMAIL/RECIPIENT not set, skipping email", len(episodes_processed))
+        log.info(
+            "Processed %d episodes — AGENTMAIL/RECIPIENT not set, skipping email",
+            len(episodes_processed),
+        )
     else:
         log.info("No new episodes to process today.")
 
