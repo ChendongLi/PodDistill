@@ -19,7 +19,7 @@ podcasts:
   # ── Goldman Sachs ─────────────────────────────────────────────────────────────
   - name: Goldman Sachs The Markets
     network: Goldman Sachs
-    playlist_id: PLIyiGQywEp66lKvfhiDbiuZnCboYneuX2
+    playlist_id: PLIyiGQywEp648INOomghD8aulpb5dS6zz
 
   # ── Morgan Stanley ────────────────────────────────────────────────────────────
   - name: Morgan Stanley Thoughts on the Market
