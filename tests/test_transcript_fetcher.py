@@ -316,3 +316,61 @@ def test_find_latest_episode_first_match_ignores_keywords():
             "UCtest", keywords=["nonexistent"], first_match=True
         )
         assert vid == "ms1"
+
+
+# ── find_latest_from_playlist ─────────────────────────────────────────────────
+
+PLAYLIST_VIDEOS = [
+    {"videoId": "p1", "title": "Japan's Bull Market Takes Shape", "lengthText": "5:18"},
+    {"videoId": "p2", "title": "The Looming Bottleneck for Global Tech", "lengthText": "4:23"},
+    {"videoId": "p3", "title": "#Shorts quick clip", "lengthText": "0:30"},
+    {"videoId": "p4", "title": "Very short clip", "lengthText": "0:45"},
+]
+
+
+def test_find_latest_from_playlist_returns_first():
+    fetcher = _make_fetcher()
+    with patch.object(fetcher, "get_playlist_videos", return_value=PLAYLIST_VIDEOS):
+        vid, title = fetcher.find_latest_from_playlist("PLtest")
+        assert vid == "p1"
+        assert "Japan" in title
+
+
+def test_find_latest_from_playlist_skips_shorts():
+    fetcher = _make_fetcher()
+    shorts_only = [{"videoId": "s1", "title": "#Shorts clip", "lengthText": "0:30"}]
+    with patch.object(fetcher, "get_playlist_videos", return_value=shorts_only):
+        vid, title = fetcher.find_latest_from_playlist("PLtest")
+        assert vid is None
+
+
+def test_find_latest_from_playlist_empty():
+    fetcher = _make_fetcher()
+    with patch.object(fetcher, "get_playlist_videos", return_value=[]):
+        vid, title = fetcher.find_latest_from_playlist("PLtest")
+        assert vid is None
+        assert title is None
+
+
+def test_find_latest_from_playlist_fallback_no_duration():
+    fetcher = _make_fetcher()
+    # All videos are short (<120s) so should fall through to second pass
+    short_videos = [
+        {"videoId": "x1", "title": "Short episode", "lengthText": "1:00"},
+    ]
+    with patch.object(fetcher, "get_playlist_videos", return_value=short_videos):
+        vid, title = fetcher.find_latest_from_playlist("PLtest")
+        assert vid == "x1"  # found in fallback pass
+
+
+def test_get_playlist_videos_calls_correct_endpoint():
+    fetcher = _make_fetcher()
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"results": [{"videoId": "v1", "title": "Ep"}]}
+    mock_resp.raise_for_status.return_value = None
+    with patch.object(fetcher.session, "get", return_value=mock_resp) as mock_get:
+        videos = fetcher.get_playlist_videos("PLtest123")
+        assert len(videos) == 1
+        call_url = mock_get.call_args[0][0]
+        assert "playlist/videos" in call_url
+        assert mock_get.call_args[1]["params"]["playlist"] == "PLtest123"
