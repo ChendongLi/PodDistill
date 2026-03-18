@@ -1,7 +1,7 @@
 # PodDistill — Podcast Registry
-# Each show needs: name, channel_id, keywords, network
-# keywords: list of lowercase title substrings used to find the right episode
-#           within the channel's recent videos (first match wins)
+# Each show needs: name, channel_id, network, and either:
+#   keywords: list of lowercase title substrings (first title match wins)
+#   first_match: true  — skip keyword filter; return first non-Shorts video meeting duration threshold
 
 podcasts:
   # ── Bloomberg ────────────────────────────────────────────────────────────────
@@ -21,11 +21,12 @@ podcasts:
       - market volatility
 
   # ── Morgan Stanley ────────────────────────────────────────────────────────────
+  # Episode titles are topic-specific and don't contain "thoughts on the market"
+  # e.g. "Japan's Bull Market Takes Shape", "The Looming Bottleneck for Global Tech"
   - name: Morgan Stanley Thoughts on the Market
     network: Morgan Stanley
     channel_id: UCz6RzD6KG_hH_oHb2kyW5jQ
-    keywords:
-      - thoughts on the market
+    first_match: true
 
   # ── CNBC ──────────────────────────────────────────────────────────────────────
   - name: Mad Money

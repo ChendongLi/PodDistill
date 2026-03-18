@@ -1,6 +1,8 @@
 """Tests for TranscriptFetcher (TranscriptAPI.com integration)."""
+
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
 
 from poddistill.fetchers.transcript_fetcher import (
     TranscriptFetcher,
@@ -10,17 +12,20 @@ from poddistill.fetchers.transcript_fetcher import (
     _parse_segments,
 )
 
-
 # ── _parse_duration ───────────────────────────────────────────────────────────
+
 
 def test_parse_duration_mm_ss():
     assert _parse_duration("23:45") == 23 * 60 + 45
 
+
 def test_parse_duration_hh_mm_ss():
     assert _parse_duration("1:30:00") == 5400
 
+
 def test_parse_duration_zero():
     assert _parse_duration("0:00") == 0
+
 
 def test_parse_duration_invalid_returns_none():
     assert _parse_duration("live") is None
@@ -28,6 +33,7 @@ def test_parse_duration_invalid_returns_none():
 
 
 # ── _parse_segments ───────────────────────────────────────────────────────────
+
 
 def test_parse_segments_basic():
     raw = [{"text": "Hello world", "offset": 0}, {"text": "Second", "offset": 5000}]
@@ -37,22 +43,30 @@ def test_parse_segments_basic():
     assert segs[0].offset_seconds == 0.0
     assert segs[1].offset_seconds == 5.0  # 5000ms -> 5.0s
 
+
 def test_parse_segments_skips_empty():
-    raw = [{"text": "", "offset": 0}, {"text": "  ", "offset": 1000}, {"text": "ok", "offset": 2000}]
+    raw = [
+        {"text": "", "offset": 0},
+        {"text": "  ", "offset": 1000},
+        {"text": "ok", "offset": 2000},
+    ]
     segs = _parse_segments(raw)
     assert len(segs) == 1
     assert segs[0].text == "ok"
+
 
 def test_parse_segments_skips_non_dict():
     raw = [{"text": "good", "offset": 0}, "bad", None, 42]
     segs = _parse_segments(raw)
     assert len(segs) == 1
 
+
 def test_parse_segments_uses_start_fallback():
     # TranscriptAPI returns all offsets in ms; 10ms = 0.01s
     raw = [{"text": "hello", "start": 10}]
     segs = _parse_segments(raw)
     assert segs[0].offset_seconds == 0.01
+
 
 def test_parse_segments_large_offset_treated_as_ms():
     raw = [{"text": "hi", "offset": 60000}]  # 60000 ms = 60 s
@@ -62,9 +76,11 @@ def test_parse_segments_large_offset_treated_as_ms():
 
 # ── TranscriptSegment ─────────────────────────────────────────────────────────
 
+
 def test_segment_timestamp_str():
     seg = TranscriptSegment("hello", 90.0)
     assert seg.timestamp_str == "1:30"
+
 
 def test_segment_repr():
     seg = TranscriptSegment("hello world", 65.0)
@@ -74,9 +90,11 @@ def test_segment_repr():
 
 # ── TranscriptFetcher init ────────────────────────────────────────────────────
 
+
 def test_init_requires_api_key():
     with pytest.raises(ValueError):
         TranscriptFetcher("")
+
 
 def test_init_sets_auth_header():
     f = TranscriptFetcher("sk_test123")
@@ -85,8 +103,10 @@ def test_init_sets_auth_header():
 
 # ── get_channel_videos ────────────────────────────────────────────────────────
 
+
 def _make_fetcher():
     return TranscriptFetcher("sk_test")
+
 
 def test_get_channel_videos_returns_results():
     fetcher = _make_fetcher()
@@ -98,6 +118,7 @@ def test_get_channel_videos_returns_results():
         assert len(videos) == 1
         assert videos[0]["videoId"] == "abc"
         mock_get.assert_called_once()
+
 
 def test_get_channel_videos_empty():
     fetcher = _make_fetcher()
@@ -117,12 +138,14 @@ SAMPLE_VIDEOS = [
     {"videoId": "v4", "title": "Bloomberg Daybreak AM", "lengthText": "45:00"},
 ]
 
+
 def test_find_latest_episode_matches_keyword():
     fetcher = _make_fetcher()
     with patch.object(fetcher, "get_channel_videos", return_value=SAMPLE_VIDEOS):
         vid, title = fetcher.find_latest_episode("UCtest", ["the close"])
         assert vid == "v2"
         assert "Close" in title
+
 
 def test_find_latest_episode_skips_shorts():
     fetcher = _make_fetcher()
@@ -132,6 +155,7 @@ def test_find_latest_episode_skips_shorts():
         # because it is a #short
         assert vid is None
 
+
 def test_find_latest_episode_skips_short_duration():
     fetcher = _make_fetcher()
     with patch.object(fetcher, "get_channel_videos", return_value=SAMPLE_VIDEOS):
@@ -140,12 +164,14 @@ def test_find_latest_episode_skips_short_duration():
         vid, title = fetcher.find_latest_episode("UCtest", ["stock movers"])
         assert vid == "v3"  # found in fallback pass
 
+
 def test_find_latest_episode_no_match():
     fetcher = _make_fetcher()
     with patch.object(fetcher, "get_channel_videos", return_value=SAMPLE_VIDEOS):
         vid, title = fetcher.find_latest_episode("UCtest", ["mad money"])
         assert vid is None
         assert title is None
+
 
 def test_find_latest_episode_case_insensitive():
     fetcher = _make_fetcher()
@@ -155,6 +181,7 @@ def test_find_latest_episode_case_insensitive():
 
 
 # ── fetch_transcript ──────────────────────────────────────────────────────────
+
 
 def test_fetch_transcript_success():
     fetcher = _make_fetcher()
@@ -168,8 +195,10 @@ def test_fetch_transcript_success():
         assert segs[0].text == "Hello"
         assert segs[1].offset_seconds == 3.0  # 3000ms / 1000 = 3.0s  # 3000ms -> 3.0s
 
+
 def test_fetch_transcript_http_error():
     import requests as _req
+
     fetcher = _make_fetcher()
     mock_resp = MagicMock()
     mock_resp.status_code = 403
@@ -180,11 +209,12 @@ def test_fetch_transcript_http_error():
         with pytest.raises(TranscriptFetchError, match="403"):
             fetcher.fetch_transcript("abc123")
 
+
 def test_fetch_transcript_timeout_retries():
     import requests as _req
+
     fetcher = _make_fetcher()
-    with patch.object(fetcher.session, "get", side_effect=_req.Timeout()), \
-         patch("time.sleep"):
+    with patch.object(fetcher.session, "get", side_effect=_req.Timeout()), patch("time.sleep"):
         with pytest.raises(TranscriptFetchError, match="timed out"):
             fetcher.fetch_transcript("abc123", retries=2, retry_delay=0)
 
@@ -197,11 +227,13 @@ SAMPLE_SEGS = [
     TranscriptSegment("Markets open", 60.0),
 ]
 
+
 def test_transcript_to_text_plain():
     fetcher = _make_fetcher()
     text = fetcher.transcript_to_text(SAMPLE_SEGS)
     assert "Hello world" in text
     assert "[" not in text  # no timestamps
+
 
 def test_transcript_to_text_with_timestamps():
     fetcher = _make_fetcher()
@@ -210,12 +242,77 @@ def test_transcript_to_text_with_timestamps():
     assert "[0:30]" in text
     assert "[1:00]" in text
 
+
 def test_transcript_to_text_max_words():
     fetcher = _make_fetcher()
     text = fetcher.transcript_to_text(SAMPLE_SEGS, max_words=2)
     # "Hello world" = 2 words, should stop after first segment
     assert "Good morning" not in text
 
+
 def test_transcript_to_text_empty():
     fetcher = _make_fetcher()
     assert fetcher.transcript_to_text([]) == ""
+
+
+# ── find_latest_episode: first_match=True ─────────────────────────────────────
+
+MS_VIDEOS = [
+    {"videoId": "ms1", "title": "Japan's Bull Market Takes Shape", "lengthText": "4:30"},
+    {"videoId": "ms2", "title": "The Looming Bottleneck for Global Tech", "lengthText": "5:00"},
+    {"videoId": "ms3", "title": "#Shorts quick clip", "lengthText": "0:30"},
+]
+
+
+def test_find_latest_episode_first_match_returns_first_non_short():
+    fetcher = _make_fetcher()
+    with patch.object(fetcher, "get_channel_videos", return_value=MS_VIDEOS):
+        vid, title = fetcher.find_latest_episode("UCtest", first_match=True)
+        assert vid == "ms1"
+        assert "Japan" in title
+
+
+def test_find_latest_episode_first_match_skips_shorts():
+    fetcher = _make_fetcher()
+    shorts_only = [
+        {"videoId": "s1", "title": "#Shorts clip", "lengthText": "0:30"},
+        {"videoId": "v1", "title": "Normal episode", "lengthText": "5:00"},
+    ]
+    with patch.object(fetcher, "get_channel_videos", return_value=shorts_only):
+        vid, title = fetcher.find_latest_episode("UCtest", first_match=True)
+        assert vid == "v1"
+
+
+def test_find_latest_episode_first_match_empty_returns_none():
+    fetcher = _make_fetcher()
+    with patch.object(fetcher, "get_channel_videos", return_value=[]):
+        vid, title = fetcher.find_latest_episode("UCtest", first_match=True)
+        assert vid is None
+        assert title is None
+
+
+def test_find_latest_episode_first_match_all_shorts_returns_none():
+    fetcher = _make_fetcher()
+    all_shorts = [{"videoId": "s1", "title": "#Shorts clip", "lengthText": "0:30"}]
+    with patch.object(fetcher, "get_channel_videos", return_value=all_shorts):
+        vid, title = fetcher.find_latest_episode("UCtest", first_match=True)
+        assert vid is None
+
+
+def test_find_latest_episode_no_keywords_no_first_match_returns_none():
+    fetcher = _make_fetcher()
+    with patch.object(fetcher, "get_channel_videos", return_value=MS_VIDEOS):
+        vid, title = fetcher.find_latest_episode("UCtest", keywords=None)
+        assert vid is None
+        assert title is None
+
+
+def test_find_latest_episode_first_match_ignores_keywords():
+    """first_match=True should ignore any keywords passed."""
+    fetcher = _make_fetcher()
+    with patch.object(fetcher, "get_channel_videos", return_value=MS_VIDEOS):
+        # Pass keywords that would NOT match the first video — first_match should still return ms1
+        vid, title = fetcher.find_latest_episode(
+            "UCtest", keywords=["nonexistent"], first_match=True
+        )
+        assert vid == "ms1"

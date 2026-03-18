@@ -7,6 +7,7 @@ the latest episode per show by searching channel video titles.
 API docs: https://transcriptapi.com/openapi.json
 Endpoint: https://transcriptapi.com/api/v2/youtube/
 """
+
 from __future__ import annotations
 
 import logging
@@ -70,8 +71,7 @@ class TranscriptFetcher:
             raise  # propagate so fetch_transcript can retry
         except requests.HTTPError as e:
             raise TranscriptFetchError(
-                f"TranscriptAPI HTTP {e.response.status_code} for {url}: "
-                f"{e.response.text[:200]}"
+                f"TranscriptAPI HTTP {e.response.status_code} for {url}: {e.response.text[:200]}"
             ) from e
         except requests.RequestException as e:
             raise TranscriptFetchError(f"TranscriptAPI request failed: {e}") from e
@@ -84,15 +84,61 @@ class TranscriptFetcher:
     def find_latest_episode(
         self,
         channel_id: str,
-        keywords: list[str],
+        keywords: list[str] | None = None,
         min_duration_seconds: int = MIN_DURATION_SECONDS,
+        first_match: bool = False,
     ) -> tuple[str, str] | tuple[None, None]:
         """
         Find the most recent video in a channel whose title matches any keyword.
         Skips #Shorts and clips shorter than min_duration_seconds.
-        Returns (video_id, title) or (None, None).
+
+        Args:
+            channel_id: YouTube channel ID.
+            keywords: List of lowercase title substrings to match. Ignored when first_match=True.
+            min_duration_seconds: Minimum episode length to accept (first pass).
+            first_match: When True, skip keyword filtering and return the first non-Shorts
+                video that meets the duration threshold (or the absolute first non-Shorts
+                video if none meets it). Use for channels like Morgan Stanley where episode
+                titles are topic-specific rather than show-name-containing.
+
+        Returns:
+            (video_id, title) or (None, None).
         """
         videos = self.get_channel_videos(channel_id)
+
+        if first_match:
+            # First pass: respect duration filter
+            for video in videos:
+                title = video.get("title", "")
+                if "#shorts" in title.lower():
+                    continue
+                dur_text = video.get("lengthText", "")
+                if dur_text:
+                    total = _parse_duration(dur_text)
+                    if total is not None and total < min_duration_seconds:
+                        continue
+                return video["videoId"], title
+
+            # Second pass: skip duration filter (catch very short episodes)
+            for video in videos:
+                title = video.get("title", "")
+                if "#shorts" in title.lower():
+                    continue
+                log.warning(
+                    "find_latest_episode: first_match returned video without duration filter "
+                    "(video=%s, title=%s)",
+                    video["videoId"],
+                    title[:60],
+                )
+                return video["videoId"], title
+
+            return None, None
+
+        if not keywords:
+            log.warning(
+                "find_latest_episode: no keywords provided and first_match=False — returning None"
+            )
+            return None, None
 
         # First pass: respect duration filter
         for video in videos:
@@ -117,7 +163,8 @@ class TranscriptFetcher:
                 if kw.lower() in title.lower():
                     log.warning(
                         "find_latest_episode: matched without duration filter (video=%s, title=%s)",
-                        video["videoId"], title[:60],
+                        video["videoId"],
+                        title[:60],
                     )
                     return video["videoId"], title
 
@@ -149,7 +196,9 @@ class TranscriptFetcher:
                 if attempt < retries - 1:
                     log.warning(
                         "Transcript fetch timeout for %s (attempt %d/%d), retrying...",
-                        video_id, attempt + 1, retries,
+                        video_id,
+                        attempt + 1,
+                        retries,
                     )
                     time.sleep(retry_delay)
         raise TranscriptFetchError(
@@ -203,6 +252,6 @@ def _parse_segments(raw: list[dict]) -> list[TranscriptSegment]:
         if not text:
             continue
         offset_ms = item.get("offset", item.get("start", 0))
-        offset_sec = float(offset_ms) / 1000.0 if isinstance(offset_ms, (int, float)) else 0.0
+        offset_sec = float(offset_ms) / 1000.0 if isinstance(offset_ms, int | float) else 0.0
         segments.append(TranscriptSegment(text=text, offset_seconds=offset_sec))
     return segments
