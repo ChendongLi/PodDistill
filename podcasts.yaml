@@ -19,11 +19,7 @@ podcasts:
   # ── Goldman Sachs ─────────────────────────────────────────────────────────────
   - name: Goldman Sachs The Markets
     network: Goldman Sachs
-    channel_id: UCyz6-taovlaOkPsPtK4KNEg
-    keywords:
-      - the markets
-      - market stress
-      - market volatility
+    playlist_id: PLIyiGQywEp66lKvfhiDbiuZnCboYneuX2
 
   # ── Morgan Stanley ────────────────────────────────────────────────────────────
   - name: Morgan Stanley Thoughts on the Market
