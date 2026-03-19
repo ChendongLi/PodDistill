@@ -35,7 +35,7 @@ def _md_to_html(md_text: str) -> str:
     lines = md_text.split("\n")
     html_lines: list[str] = []
     in_list = False
-    h2 = 'style="margin:20px 0 6px;font-size:16px;color:#1a1a2e;"'
+    h2 = 'style="margin:20px 0 6px;font-size:16px;color:#0f3460;"'
     h3 = 'style="margin:16px 0 4px;font-size:14px;color:#374151;"'
     li = 'style="margin:4px 0;color:#374151;line-height:1.6;"'
     p = 'style="margin:8px 0;color:#374151;line-height:1.6;"'
@@ -123,7 +123,7 @@ def _episode_card(ep: dict) -> str:
         + '<tr><td style="background:#fff;border-radius:8px;border:1px solid #e5e7eb;'
         + f'border-left:4px solid {accent};padding:20px 24px;">'
         + badge
-        + f'<h2 style="margin:0 0 2px;font-size:18px;color:#1a1a2e;">{name}</h2>'
+        + f'<h2 style="margin:0 0 2px;font-size:18px;color:#0f3460;">{name}</h2>'
         + f'<p style="margin:0 0 14px;font-size:13px;color:#6b7280;">{title}</p>'
         + '<hr style="border:none;border-top:1px solid #f3f4f6;margin:0 0 12px;">'
         + _md_to_html(summary)
@@ -152,14 +152,14 @@ def _build_email_body(episodes: list[dict], date_str: str) -> tuple[str, str]:
 <title>PodDistill Digest &mdash; {date_str}</title></head>
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;">
-<tr><td align="center" style="padding:32px 16px;">
-<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
-<tr><td style="background:#1a1a2e;border-radius:8px 8px 0 0;padding:24px 28px;">
+<tr><td align="center" style="padding:24px 8px;">
+<table width="680" cellpadding="0" cellspacing="0" style="max-width:680px;width:100%;">
+<tr><td style="background:#0f3460;border-radius:8px 8px 0 0;padding:24px 24px;">
   <p style="margin:0;font-size:24px;font-weight:700;color:#fff;">&#127897; PodDistill</p>
   <p style="margin:4px 0 0;font-size:13px;color:#94a3b8;">{date_str} &middot; {count} new episode{pl}</p>
 </td></tr>
-<tr><td style="padding:24px 28px;background:#f3f4f6;">{cards}</td></tr>
-<tr><td style="background:#e5e7eb;border-radius:0 0 8px 8px;padding:14px 28px;text-align:center;font-size:12px;color:#9ca3af;">
+<tr><td style="padding:20px 16px;background:#f3f4f6;">{cards}</td></tr>
+<tr><td style="background:#e5e7eb;border-radius:0 0 8px 8px;padding:14px 16px;text-align:center;font-size:12px;color:#9ca3af;">
   Delivered by <strong style="color:#6b7280;">PodDistill</strong> &middot; Weekdays at 3&nbsp;PM&nbsp;PT
 </td></tr>
 </table></td></tr></table>
