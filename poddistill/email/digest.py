@@ -170,15 +170,27 @@ def _build_email_body(episodes: list[dict], date_str: str) -> tuple[str, str]:
 
 def send_digest(
     episodes: list[dict],
-    recipient: str,
+    recipient: str | list[str],
     api_key: str,
     inbox: str = DEFAULT_INBOX,
     date_str: str | None = None,
 ) -> bool:
-    """Send PodDistill digest email via AgentMail."""
+    """Send PodDistill digest email via AgentMail.
+
+    recipient can be a single address string (comma-separated for multiple)
+    or a list of address strings.
+    """
     if not episodes:
         log.info("No episodes to digest, skipping email")
         return False
+
+    if isinstance(recipient, str):
+        recipients = [r.strip() for r in recipient.split(",") if r.strip()]
+    else:
+        recipients = [r.strip() for r in recipient if r.strip()]
+
+    if not recipients:
+        raise DigestError("No valid recipients provided")
 
     if date_str is None:
         date_str = datetime.now(UTC).strftime("%B %d, %Y")
@@ -187,13 +199,13 @@ def send_digest(
     text_body, html_body = _build_email_body(episodes, date_str)
 
     url = f"{AGENTMAIL_API_BASE}/inboxes/{inbox}/messages/send"
-    log.info("Sending digest to %s via %s (%d episodes)", recipient, inbox, len(episodes))
+    log.info("Sending digest to %s via %s (%d episodes)", recipients, inbox, len(episodes))
 
     try:
         resp = requests.post(
             url,
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"to": [recipient], "subject": subject, "text": text_body, "html": html_body},
+            json={"to": recipients, "subject": subject, "text": text_body, "html": html_body},
             timeout=30,
         )
     except Exception as e:
