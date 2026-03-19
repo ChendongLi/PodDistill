@@ -2,19 +2,13 @@
 # Fields:
 #   name        — display name
 #   network     — publisher name
-#   channel_id  — YouTube channel ID; used with keywords for title-match episode discovery
-#   playlist_id — YouTube playlist ID; when set, picks the most recent video from the playlist
-#                 (ignores channel_id/keywords/first_match)
-#   keywords    — lowercase title substrings to match within channel_id videos (any match wins)
-#   first_match — if true, skip keyword filter and return the newest non-short video in the channel
+#   playlist_id — YouTube playlist ID; picks the most recent video from the playlist
 
 podcasts:
   # ── Bloomberg ────────────────────────────────────────────────────────────────
   - name: Bloomberg Businessweek
     network: Bloomberg
-    channel_id: UCIALMKvObZNtJ6AmdCLP7Lg
-    keywords:
-      - businessweek
+    playlist_id: PLe4PRejZgr0NDtGW4nghKtCxl6SCdFJfq
 
   # ── Goldman Sachs ─────────────────────────────────────────────────────────────
   - name: Goldman Sachs The Markets
