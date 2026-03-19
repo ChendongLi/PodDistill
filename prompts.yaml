@@ -1,12 +1,14 @@
-# prompts.yaml — Claude summarization prompts for PodDistill
+# prompts.yaml — Claude summarization prompt template for PodDistill
+#
+# This file is a pure template. Per-show configuration lives in podcasts.yaml.
 #
 # Variables available in user_template:
 #   {show_name}           — e.g. "Mad Money"
 #   {network}             — e.g. "CNBC"
 #   {title}               — episode title
 #   {transcript}          — full transcript text
-#   {custom_instructions} — injected from shows.<show_name>.custom_instructions
-#                           (empty string if no per-show override)
+#   {custom_instructions} — from podcasts.yaml per-show custom_instructions field
+#                           (empty string if not set)
 
 default:
   system: |
@@ -43,36 +45,3 @@ default:
 
     Transcript:
     {transcript}
-
-# Per-show custom instructions injected as {custom_instructions}
-shows:
-  Mad Money:
-    custom_instructions: |
-      Additional focus for Mad Money:
-      - Extract every stock pick with its buy/sell/hold call
-      - Note Cramer's conviction level (enthusiastic vs cautious)
-      - Flag any sector themes he's pushing this episode
-      - Lightning Round picks should each appear as a bullet
-
-  Bloomberg Businessweek:
-    custom_instructions: |
-      Additional focus for Bloomberg Businessweek:
-      - Prioritise macro signals: Fed, rates, inflation, growth
-      - Surface any data points or economic indicators cited
-      - Note if the episode is a live reaction vs a pre-recorded analysis
-
-  Goldman Sachs The Markets:
-    custom_instructions: |
-      Additional focus for Goldman Sachs The Markets:
-      - Focus on GS positioning and trade recommendations
-      - Extract any specific price targets or spread levels
-      - Note the asset classes covered (equities, credit, rates, FX, commodities)
-      - Flag any divergence from consensus view
-
-  Morgan Stanley Thoughts on the Market:
-    custom_instructions: |
-      Additional focus for Morgan Stanley Thoughts on the Market:
-      - Identify the macro theme being argued
-      - Extract any sector or regional calls
-      - Note the host and any guest perspectives if present
-      - Flag forward-looking indicators or leading signals cited

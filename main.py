@@ -146,12 +146,15 @@ def process_podcast_transcriptapi(
         }
     ]
 
+    custom_instructions = podcast.get("custom_instructions", "") or ""
+
     try:
         summarized = summarize_chunks(
             chunks,
             api_key=anthropic_api_key,
             show_name=name,
             network=network,
+            custom_instructions=custom_instructions,
         )
     except SummarizerError as e:
         log.error("[%s] Summarization failed: %s", name, e)

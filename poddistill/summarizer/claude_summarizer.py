@@ -24,6 +24,7 @@ DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 MAX_TOKENS = 1024
 
 # Default prompts.yaml lives next to main.py (repo root)
+# Per-show custom_instructions come from podcasts.yaml, not this file.
 DEFAULT_PROMPTS_FILE = Path(__file__).parent.parent.parent / "prompts.yaml"
 
 
@@ -67,21 +68,23 @@ def build_prompt(
     transcript: str,
     show_name: str = "",
     network: str = "",
+    custom_instructions: str = "",
     prompts: dict | None = None,
 ) -> tuple[str, str]:
     """
     Build (system_prompt, user_message) for a single summarization call.
 
-    Looks up show-specific custom_instructions in prompts['shows'][show_name].
-    Falls back to an empty string if no per-show override exists.
+    custom_instructions is passed in directly (sourced from podcasts.yaml).
+    prompts.yaml is a pure template — no per-show data lives there.
 
     Args:
-        title:      Episode title.
-        transcript: Full transcript text.
-        show_name:  Podcast show name (used for per-show lookup).
-        network:    Network name (e.g. "CNBC").
-        prompts:    Parsed prompts dict (from load_prompts). Loaded from disk
-                    if not supplied.
+        title:               Episode title.
+        transcript:          Full transcript text.
+        show_name:           Podcast show name (injected into template).
+        network:             Network name (e.g. "CNBC").
+        custom_instructions: Per-show guidance from podcasts.yaml. Empty if not set.
+        prompts:             Parsed prompts dict (from load_prompts). Loaded from disk
+                             if not supplied.
 
     Returns:
         (system_prompt, user_message) tuple.
@@ -93,18 +96,13 @@ def build_prompt(
     system = default.get("system", "You are a helpful podcast summarizer.").strip()
     user_template = default.get("user_template", "{transcript}").strip()
 
-    # Per-show custom instructions (empty string if not configured)
-    shows = prompts.get("shows", {}) or {}
-    show_config = shows.get(show_name, {}) or {}
-    custom_instructions = (show_config.get("custom_instructions") or "").strip()
-
-    # Format the user message
+    # Format the user message — custom_instructions passed in from podcasts.yaml
     user_message = user_template.format(
         show_name=show_name or "Unknown Show",
         network=network or "Unknown Network",
         title=title,
         transcript=transcript,
-        custom_instructions=custom_instructions,
+        custom_instructions=custom_instructions.strip(),
     )
 
     return system, user_message
@@ -170,21 +168,23 @@ def summarize_chunks(
     model: str = DEFAULT_MODEL,
     show_name: str = "",
     network: str = "",
+    custom_instructions: str = "",
     prompts: dict | None = None,
 ) -> list[dict]:
     """
     Summarize a list of transcript chunks using Claude.
 
     Args:
-        chunks:     List of dicts with keys:
-                      - title (str): Chapter/segment title
-                      - startSeconds (int): Segment start time in seconds
-                      - text (str): Transcript text for this segment
-        api_key:    Anthropic API key.
-        model:      Claude model to use.
-        show_name:  Podcast show name (used for per-show prompt lookup).
-        network:    Network name (e.g. "CNBC").
-        prompts:    Pre-loaded prompts dict. Loaded from disk if not supplied.
+        chunks:              List of dicts with keys:
+                               - title (str): Chapter/segment title
+                               - startSeconds (int): Segment start time in seconds
+                               - text (str): Transcript text for this segment
+        api_key:             Anthropic API key.
+        model:               Claude model to use.
+        show_name:           Podcast show name (injected into prompt template).
+        network:             Network name (e.g. "CNBC").
+        custom_instructions: Per-show guidance from podcasts.yaml.
+        prompts:             Pre-loaded prompts dict. Loaded from disk if not supplied.
 
     Returns:
         List of dicts with keys:
@@ -229,6 +229,7 @@ def summarize_chunks(
             transcript=text,
             show_name=show_name,
             network=network,
+            custom_instructions=custom_instructions,
             prompts=prompts,
         )
         summary_md = _call_claude(system, user_message, api_key, model)
