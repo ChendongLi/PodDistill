@@ -134,7 +134,7 @@ def process_podcast_transcriptapi(
     transcript_text = fetcher.transcript_to_text(
         segments,
         include_timestamps=True,
-        max_words=6000,
+        max_words=10000,
     )
 
     # Summarize with Claude
