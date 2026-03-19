@@ -2,80 +2,165 @@
 Tests for poddistill/summarizer/claude_summarizer.py
 
 Levels:
-  - Unit        — prompt building, output parsing
-  - Integration — mocked HTTP
+  - Unit        — prompt building (load_prompts, build_prompt)
+  - Integration — mocked HTTP (_call_claude, summarize_chunks)
 """
+
 from __future__ import annotations
 
 import sys
-import traceback
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from poddistill.summarizer.claude_summarizer import (
     SummarizerError,
-    _build_prompt,
     _call_claude,
+    build_prompt,
+    load_prompts,
     summarize_chunks,
 )
 
-
 # ---------------------------------------------------------------------------
-# Unit tests — prompt building
+# Helpers
 # ---------------------------------------------------------------------------
 
-def test_build_prompt_includes_title():
-    prompt = _build_prompt("Introduction", "Hello world text")
-    assert "Introduction" in prompt
+MINIMAL_PROMPTS = {
+    "default": {
+        "system": "You are a summarizer.",
+        "user_template": "Show: {show_name} ({network})\nTitle: {title}\n{custom_instructions}\n{transcript}",
+    },
+    "shows": {
+        "Mad Money": {
+            "custom_instructions": "Focus on stock picks.",
+        },
+    },
+}
 
-def test_build_prompt_includes_text():
-    prompt = _build_prompt("Intro", "Hello world text")
-    assert "Hello world text" in prompt
-
-def test_build_prompt_includes_instructions():
-    prompt = _build_prompt("Test", "text")
-    assert "headline" in prompt.lower()
-    assert "bullet" in prompt.lower()
-
-def test_build_prompt_includes_markdown_instruction():
-    prompt = _build_prompt("Test", "text")
-    assert "markdown" in prompt.lower()
-
-
-# ---------------------------------------------------------------------------
-# Integration tests — mocked HTTP
-# ---------------------------------------------------------------------------
 
 def _make_mock_response(text: str, status_code: int = 200):
     resp = MagicMock()
     resp.status_code = status_code
     resp.json.return_value = {
         "content": [{"type": "text", "text": text}],
-        "model": "claude-3-5-haiku-20241022",
+        "model": "claude-haiku-4-5-20251001",
         "role": "assistant",
     }
     resp.text = text
     return resp
 
 
+# ---------------------------------------------------------------------------
+# Unit tests — load_prompts
+# ---------------------------------------------------------------------------
+
+
+def test_load_prompts_from_real_file(tmp_path):
+    p = tmp_path / "prompts.yaml"
+    p.write_text(yaml.dump(MINIMAL_PROMPTS))
+    result = load_prompts(p)
+    assert "default" in result
+    assert "shows" in result
+
+
+def test_load_prompts_missing_file(tmp_path):
+    with pytest.raises(SummarizerError, match="not found"):
+        load_prompts(tmp_path / "nonexistent.yaml")
+
+
+def test_load_prompts_malformed_yaml(tmp_path):
+    p = tmp_path / "prompts.yaml"
+    p.write_text(": bad: yaml: [\n")
+    with pytest.raises(SummarizerError, match="parse"):
+        load_prompts(p)
+
+
+def test_load_prompts_missing_default_key(tmp_path):
+    p = tmp_path / "prompts.yaml"
+    p.write_text(yaml.dump({"shows": {}}))
+    with pytest.raises(SummarizerError, match="default"):
+        load_prompts(p)
+
+
+def test_load_prompts_env_var_override(tmp_path, monkeypatch):
+    p = tmp_path / "custom_prompts.yaml"
+    p.write_text(yaml.dump(MINIMAL_PROMPTS))
+    monkeypatch.setenv("PROMPTS_FILE", str(p))
+    result = load_prompts()  # no explicit path — should read env var
+    assert "default" in result
+
+
+# ---------------------------------------------------------------------------
+# Unit tests — build_prompt
+# ---------------------------------------------------------------------------
+
+
+def test_build_prompt_includes_title():
+    system, user = build_prompt("My Episode", "transcript text", prompts=MINIMAL_PROMPTS)
+    assert "My Episode" in user
+
+
+def test_build_prompt_includes_transcript():
+    system, user = build_prompt("Title", "hello world content", prompts=MINIMAL_PROMPTS)
+    assert "hello world content" in user
+
+
+def test_build_prompt_includes_show_name():
+    system, user = build_prompt("Title", "text", show_name="Mad Money", prompts=MINIMAL_PROMPTS)
+    assert "Mad Money" in user
+
+
+def test_build_prompt_includes_network():
+    system, user = build_prompt("Title", "text", network="CNBC", prompts=MINIMAL_PROMPTS)
+    assert "CNBC" in user
+
+
+def test_build_prompt_per_show_custom_instructions():
+    system, user = build_prompt("Title", "text", show_name="Mad Money", prompts=MINIMAL_PROMPTS)
+    assert "stock picks" in user
+
+
+def test_build_prompt_no_custom_instructions_for_unknown_show():
+    system, user = build_prompt("Title", "text", show_name="Unknown Show", prompts=MINIMAL_PROMPTS)
+    # Should not raise; custom_instructions should be empty
+    assert "Unknown Show" in user
+
+
+def test_build_prompt_returns_system_string():
+    system, user = build_prompt("Title", "text", prompts=MINIMAL_PROMPTS)
+    assert "summarizer" in system.lower()
+
+
+# ---------------------------------------------------------------------------
+# Integration tests — _call_claude
+# ---------------------------------------------------------------------------
+
+
 def test_call_claude_success():
     with patch("poddistill.summarizer.claude_summarizer.requests.post") as mock_post:
         mock_post.return_value = _make_mock_response("## Summary\n\n- Point 1")
-        result = _call_claude("Summarize this", api_key="sk-fake")
+        result = _call_claude("system", "user message", api_key="sk-fake")
         assert "Summary" in result
         assert "Point 1" in result
+
+
+def test_call_claude_passes_system_prompt():
+    with patch("poddistill.summarizer.claude_summarizer.requests.post") as mock_post:
+        mock_post.return_value = _make_mock_response("ok")
+        _call_claude("my system prompt", "user msg", api_key="sk-fake")
+        payload = mock_post.call_args[1]["json"]
+        assert payload["system"] == "my system prompt"
 
 
 def test_call_claude_api_error():
     with patch("poddistill.summarizer.claude_summarizer.requests.post") as mock_post:
         mock_post.return_value = _make_mock_response("Unauthorized", status_code=401)
-        try:
-            _call_claude("Summarize this", api_key="bad-key")
-            assert False, "Should raise SummarizerError"
-        except SummarizerError as e:
-            assert "401" in str(e)
+        with pytest.raises(SummarizerError, match="401"):
+            _call_claude("sys", "user", api_key="bad-key")
 
 
 def test_call_claude_empty_response():
@@ -84,21 +169,20 @@ def test_call_claude_empty_response():
         resp.status_code = 200
         resp.json.return_value = {"content": []}
         mock_post.return_value = resp
-        try:
-            _call_claude("Summarize this", api_key="sk-fake")
-            assert False, "Should raise SummarizerError"
-        except SummarizerError as e:
-            assert "empty" in str(e).lower()
+        with pytest.raises(SummarizerError, match="empty"):
+            _call_claude("sys", "user", api_key="sk-fake")
 
 
 def test_call_claude_network_error():
     with patch("poddistill.summarizer.claude_summarizer.requests.post") as mock_post:
         mock_post.side_effect = Exception("Connection refused")
-        try:
-            _call_claude("Summarize this", api_key="sk-fake")
-            assert False, "Should raise SummarizerError"
-        except SummarizerError as e:
-            assert "failed" in str(e).lower()
+        with pytest.raises(SummarizerError, match="failed"):
+            _call_claude("sys", "user", api_key="sk-fake")
+
+
+# ---------------------------------------------------------------------------
+# Integration tests — summarize_chunks
+# ---------------------------------------------------------------------------
 
 
 def test_summarize_chunks_success():
@@ -107,14 +191,44 @@ def test_summarize_chunks_success():
         {"title": "Main Topic", "startSeconds": 300, "text": "Today we discuss AI."},
     ]
     with patch("poddistill.summarizer.claude_summarizer.requests.post") as mock_post:
-        mock_post.return_value = _make_mock_response("## Summary\n\n- Key point here")
-        results = summarize_chunks(chunks, api_key="sk-fake")
+        mock_post.return_value = _make_mock_response("## Summary\n\n- Key point")
+        results = summarize_chunks(chunks, api_key="sk-fake", prompts=MINIMAL_PROMPTS)
         assert len(results) == 2
         for r in results:
             assert "title" in r
             assert "startSeconds" in r
             assert "summary_md" in r
-            assert "Summary" in r["summary_md"]
+
+
+def test_summarize_chunks_passes_show_context():
+    chunks = [{"title": "Ep", "startSeconds": 0, "text": "Content here."}]
+    with patch("poddistill.summarizer.claude_summarizer.requests.post") as mock_post:
+        mock_post.return_value = _make_mock_response("ok")
+        summarize_chunks(
+            chunks,
+            api_key="sk-fake",
+            show_name="Mad Money",
+            network="CNBC",
+            prompts=MINIMAL_PROMPTS,
+        )
+        payload = mock_post.call_args[1]["json"]
+        # show_name and network should appear in the user message
+        assert "Mad Money" in payload["messages"][0]["content"]
+        assert "CNBC" in payload["messages"][0]["content"]
+
+
+def test_summarize_chunks_per_show_instructions_injected():
+    chunks = [{"title": "Ep", "startSeconds": 0, "text": "Content."}]
+    with patch("poddistill.summarizer.claude_summarizer.requests.post") as mock_post:
+        mock_post.return_value = _make_mock_response("ok")
+        summarize_chunks(
+            chunks,
+            api_key="sk-fake",
+            show_name="Mad Money",
+            prompts=MINIMAL_PROMPTS,
+        )
+        payload = mock_post.call_args[1]["json"]
+        assert "stock picks" in payload["messages"][0]["content"]
 
 
 def test_summarize_chunks_empty_text_skipped():
@@ -124,57 +238,21 @@ def test_summarize_chunks_empty_text_skipped():
     ]
     with patch("poddistill.summarizer.claude_summarizer.requests.post") as mock_post:
         mock_post.return_value = _make_mock_response("## Summary\n\n- Point")
-        results = summarize_chunks(chunks, api_key="sk-fake")
+        results = summarize_chunks(chunks, api_key="sk-fake", prompts=MINIMAL_PROMPTS)
         assert len(results) == 2
-        # Empty chunk gets a placeholder
-        assert "No transcript" in results[0]["summary_md"] or results[0]["summary_md"] != ""
-        # API called only once (for the non-empty chunk)
-        assert mock_post.call_count == 1
+        assert "No transcript" in results[0]["summary_md"]
+        assert mock_post.call_count == 1  # only called for non-empty chunk
 
 
 def test_summarize_chunks_preserves_metadata():
     chunks = [{"title": "Test Chapter", "startSeconds": 150, "text": "Content"}]
     with patch("poddistill.summarizer.claude_summarizer.requests.post") as mock_post:
         mock_post.return_value = _make_mock_response("## Summary")
-        results = summarize_chunks(chunks, api_key="sk-fake")
+        results = summarize_chunks(chunks, api_key="sk-fake", prompts=MINIMAL_PROMPTS)
         assert results[0]["title"] == "Test Chapter"
         assert results[0]["startSeconds"] == 150
 
 
 def test_summarize_chunks_empty_list():
-    results = summarize_chunks([], api_key="sk-fake")
+    results = summarize_chunks([], api_key="sk-fake", prompts=MINIMAL_PROMPTS)
     assert results == []
-
-
-# ---------------------------------------------------------------------------
-# Run directly
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    tests = [
-        test_build_prompt_includes_title,
-        test_build_prompt_includes_text,
-        test_build_prompt_includes_instructions,
-        test_build_prompt_includes_markdown_instruction,
-        test_call_claude_success,
-        test_call_claude_api_error,
-        test_call_claude_empty_response,
-        test_call_claude_network_error,
-        test_summarize_chunks_success,
-        test_summarize_chunks_empty_text_skipped,
-        test_summarize_chunks_preserves_metadata,
-        test_summarize_chunks_empty_list,
-    ]
-    passed = 0
-    failed = 0
-    for t in tests:
-        try:
-            t()
-            print(f"  PASS  {t.__name__}")
-            passed += 1
-        except Exception:
-            print(f"  FAIL  {t.__name__}")
-            traceback.print_exc()
-            failed += 1
-    print(f"\n{passed} passed, {failed} failed")
-    sys.exit(0 if failed == 0 else 1)
