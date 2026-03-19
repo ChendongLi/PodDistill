@@ -138,19 +138,21 @@ def process_podcast_transcriptapi(
     )
 
     # Summarize with Claude
-    yt_url = f"https://youtube.com/watch?v={video_id}"
-    prompt_context = f"Show: {name} ({network})\nEpisode: {ep_title}\nVideo: {yt_url}\n\n"
-
     chunks = [
         {
             "title": ep_title,
-            "text": prompt_context + transcript_text,
-            "start_time": 0,
+            "text": transcript_text,
+            "startSeconds": 0,
         }
     ]
 
     try:
-        summarized = summarize_chunks(chunks, api_key=anthropic_api_key)
+        summarized = summarize_chunks(
+            chunks,
+            api_key=anthropic_api_key,
+            show_name=name,
+            network=network,
+        )
     except SummarizerError as e:
         log.error("[%s] Summarization failed: %s", name, e)
         return None
