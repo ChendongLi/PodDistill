@@ -1,41 +1,12 @@
 """
-Email digest via AgentMail.
-
-Sends a daily PodDistill digest email containing summaries of all newly
-processed podcast episodes.
-
-AgentMail API:
-    POST https://api.agentmail.to/v0/inboxes/{inbox_id}/messages/send
-    Authorization: Bearer {api_key}
-    Body: {
-        "to": ["recipient@email.com"],
-        "subject": "...",
-        "text": "...",
-        "html": "..."
-    }
-
-Usage:
-    from poddistill.email.digest import send_digest
-
-    success = send_digest(
-        episodes=[
-            {
-                "podcast_name": "Lex Fridman Podcast",
-                "episode_title": "Episode #400",
-                "video_id": "dQw4w9WgXcQ",
-                "summary_md": "## Summary\n\n- Point 1",
-            }
-        ],
-        recipient="user@example.com",
-        api_key="your-agentmail-api-key",
-    )
+Email digest via AgentMail — HTML email with inline CSS.
 """
+
 from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 import requests
 
@@ -44,105 +15,157 @@ log = logging.getLogger(__name__)
 AGENTMAIL_API_BASE = "https://api.agentmail.to/v0"
 DEFAULT_INBOX = "agentlens@agentmail.to"
 
+NETWORK_COLORS: dict[str, str] = {
+    "Bloomberg": "#f26522",
+    "Goldman Sachs": "#6699cc",
+    "Morgan Stanley": "#003087",
+    "CNBC": "#cc0000",
+}
+
 
 class DigestError(Exception):
     """Raised when the digest email fails to send."""
 
 
+def _network_color(network: str) -> str:
+    return NETWORK_COLORS.get(network, "#6366f1")
+
+
 def _md_to_html(md_text: str) -> str:
-    """Convert Markdown to simple HTML for email."""
     lines = md_text.split("\n")
-    html_lines = []
+    html_lines: list[str] = []
     in_list = False
+    h2 = 'style="margin:20px 0 6px;font-size:16px;color:#1a1a2e;"'
+    h3 = 'style="margin:16px 0 4px;font-size:14px;color:#374151;"'
+    li = 'style="margin:4px 0;color:#374151;line-height:1.6;"'
+    p = 'style="margin:8px 0;color:#374151;line-height:1.6;"'
+    bq = 'style="margin:8px 0 8px 16px;padding:8px 12px;border-left:3px solid #d1d5db;color:#6b7280;font-style:italic;"'
+
+    def close_list() -> None:
+        nonlocal in_list
+        if in_list:
+            html_lines.append("</ul>")
+            in_list = False
 
     for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("### "):
-            if in_list:
-                html_lines.append("</ul>")
-                in_list = False
-            html_lines.append(f"<h3>{stripped[4:]}</h3>")
-        elif stripped.startswith("## "):
-            if in_list:
-                html_lines.append("</ul>")
-                in_list = False
-            html_lines.append(f"<h2>{stripped[3:]}</h2>")
-        elif stripped.startswith("# "):
-            if in_list:
-                html_lines.append("</ul>")
-                in_list = False
-            html_lines.append(f"<h1>{stripped[2:]}</h1>")
-        elif stripped.startswith("- ") or stripped.startswith("* "):
+        s = line.strip()
+        if s.startswith("### "):
+            close_list()
+            html_lines.append(f"<h3 {h3}>{s[4:]}</h3>")
+        elif s.startswith("## "):
+            close_list()
+            html_lines.append(f"<h2 {h2}>{s[3:]}</h2>")
+        elif s.startswith("# "):
+            close_list()
+            html_lines.append(f"<h2 {h2}>{s[2:]}</h2>")
+        elif s.startswith(("- ", "* ")):
             if not in_list:
-                html_lines.append("<ul>")
+                html_lines.append('<ul style="margin:8px 0;padding-left:20px;">')
                 in_list = True
-            html_lines.append(f"<li>{stripped[2:]}</li>")
-        elif stripped.startswith("> "):
-            if in_list:
-                html_lines.append("</ul>")
-                in_list = False
-            html_lines.append(f"<blockquote><em>{stripped[2:]}</em></blockquote>")
-        elif stripped in ("---", "***", "___"):
-            if in_list:
-                html_lines.append("</ul>")
-                in_list = False
-            html_lines.append("<hr>")
-        elif not stripped:
-            if in_list:
-                html_lines.append("</ul>")
-                in_list = False
-            html_lines.append("")
+            html_lines.append(f"<li {li}>{s[2:]}</li>")
+        elif s.startswith("> "):
+            close_list()
+            html_lines.append(f"<blockquote {bq}>{s[2:]}</blockquote>")
+        elif s in ("---", "***", "___"):
+            close_list()
+            html_lines.append(
+                '<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;">'
+            )
+        elif not s:
+            close_list()
         else:
-            if in_list:
-                html_lines.append("</ul>")
-                in_list = False
-            html_lines.append(f"<p>{stripped}</p>")
+            close_list()
+            html_lines.append(f"<p {p}>{s}</p>")
 
-    if in_list:
-        html_lines.append("</ul>")
-
+    close_list()
     html = "\n".join(html_lines)
     html = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", html)
     html = re.sub(r"\*(.+?)\*", r"<em>\1</em>", html)
-    html = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', html)
+    html = re.sub(
+        r"\[([^\]]+)\]\(([^)]+)\)",
+        r'<a href="\2" style="color:#6366f1;text-decoration:none;">\1</a>',
+        html,
+    )
     return html
 
 
-def _build_email_body(episodes: list[dict]) -> tuple[str, str]:
-    """Build (text_body, html_body) for the digest email."""
-    text_parts = []
-    html_parts = [
-        "<html><body>",
-        "<h1>🎙️ PodDistill Daily Digest</h1>",
-        "<p>Your podcast summaries for today:</p>",
-        "<hr>",
-    ]
+def _episode_card(ep: dict) -> str:
+    name = ep.get("podcast_name", "Unknown Podcast")
+    title = ep.get("episode_title", "Untitled Episode")
+    network = ep.get("network", "")
+    vid = ep.get("video_id", "")
+    summary = ep.get("summary_md", "")
+    accent = _network_color(network)
+    yt_url = f"https://youtube.com/watch?v={vid}" if vid else ""
 
+    badge = (
+        (
+            f'<span style="display:inline-block;padding:2px 8px;background:{accent}22;'
+            + f"color:{accent};border-radius:12px;font-size:11px;font-weight:700;"
+            + f'letter-spacing:0.5px;margin-bottom:8px;text-transform:uppercase;">{network}</span><br>'
+        )
+        if network
+        else ""
+    )
+
+    watch = (
+        (
+            f'<p style="margin:16px 0 0;"><a href="{yt_url}" style="display:inline-block;'
+            + f"padding:8px 18px;background:{accent};color:#fff;text-decoration:none;"
+            + 'border-radius:4px;font-size:13px;font-weight:600;">&#9654; Watch on YouTube</a></p>'
+        )
+        if yt_url
+        else ""
+    )
+
+    return (
+        '<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">'
+        + '<tr><td style="background:#fff;border-radius:8px;border:1px solid #e5e7eb;'
+        + f'border-left:4px solid {accent};padding:20px 24px;">'
+        + badge
+        + f'<h2 style="margin:0 0 2px;font-size:18px;color:#1a1a2e;">{name}</h2>'
+        + f'<p style="margin:0 0 14px;font-size:13px;color:#6b7280;">{title}</p>'
+        + '<hr style="border:none;border-top:1px solid #f3f4f6;margin:0 0 12px;">'
+        + _md_to_html(summary)
+        + watch
+        + "</td></tr></table>"
+    )
+
+
+def _build_email_body(episodes: list[dict], date_str: str) -> tuple[str, str]:
+    # Plain text
+    lines = [f"PodDistill Digest — {date_str}", "=" * 50, ""]
     for ep in episodes:
-        podcast_name = ep.get("podcast_name", "Unknown Podcast")
-        episode_title = ep.get("episode_title", "Untitled Episode")
-        video_id = ep.get("video_id", "")
-        summary_md = ep.get("summary_md", "")
+        lines.append(f"## {ep.get('podcast_name', '')} — {ep.get('episode_title', '')}")
+        if ep.get("video_id"):
+            lines.append(f"Watch: https://youtube.com/watch?v={ep['video_id']}")
+        lines += ["", ep.get("summary_md", ""), "\n" + "-" * 40 + "\n"]
+    lines.append("Delivered by PodDistill · Weekdays at 3 PM PT")
 
-        text_parts.append("=" * 60)
-        text_parts.append(f"{podcast_name}: {episode_title}")
-        if video_id:
-            text_parts.append(f"Watch: https://youtube.com/watch?v={video_id}")
-        text_parts.append("")
-        text_parts.append(summary_md)
-        text_parts.append("")
+    cards = "\n".join(_episode_card(ep) for ep in episodes)
+    count = len(episodes)
+    pl = "s" if count != 1 else ""
 
-        html_parts.append(f"<h2>{podcast_name}: {episode_title}</h2>")
-        if video_id:
-            yt_url = f"https://youtube.com/watch?v={video_id}"
-            html_parts.append(f'<p><a href="{yt_url}">▶ Watch on YouTube</a></p>')
-        html_parts.append(_md_to_html(summary_md))
-        html_parts.append("<hr>")
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>PodDistill Digest &mdash; {date_str}</title></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;">
+<tr><td align="center" style="padding:32px 16px;">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+<tr><td style="background:#1a1a2e;border-radius:8px 8px 0 0;padding:24px 28px;">
+  <p style="margin:0;font-size:24px;font-weight:700;color:#fff;">&#127897; PodDistill</p>
+  <p style="margin:4px 0 0;font-size:13px;color:#94a3b8;">{date_str} &middot; {count} new episode{pl}</p>
+</td></tr>
+<tr><td style="padding:24px 28px;background:#f3f4f6;">{cards}</td></tr>
+<tr><td style="background:#e5e7eb;border-radius:0 0 8px 8px;padding:14px 28px;text-align:center;font-size:12px;color:#9ca3af;">
+  Delivered by <strong style="color:#6b7280;">PodDistill</strong> &middot; Weekdays at 3&nbsp;PM&nbsp;PT
+</td></tr>
+</table></td></tr></table>
+</body></html>"""
 
-    html_parts.append("<p><em>Delivered by PodDistill 🎙️</em></p>")
-    html_parts.append("</body></html>")
-
-    return "\n".join(text_parts), "\n".join(html_parts)
+    return "\n".join(lines), html
 
 
 def send_digest(
@@ -150,41 +173,18 @@ def send_digest(
     recipient: str,
     api_key: str,
     inbox: str = DEFAULT_INBOX,
-    date_str: Optional[str] = None,
+    date_str: str | None = None,
 ) -> bool:
-    """
-    Send a PodDistill digest email via AgentMail.
-
-    Args:
-        episodes:  List of episode dicts with keys:
-                     podcast_name, episode_title, video_id, summary_md
-        recipient: Destination email address.
-        api_key:   AgentMail API key (used as Bearer token).
-        inbox:     AgentMail inbox ID (default: agentlens@agentmail.to)
-        date_str:  Date string for subject (default: today UTC, e.g. "March 17, 2026")
-
-    Returns:
-        True if sent, False if no episodes (nothing to send).
-
-    Raises:
-        DigestError: If the API call fails.
-    """
+    """Send PodDistill digest email via AgentMail."""
     if not episodes:
         log.info("No episodes to digest, skipping email")
         return False
 
     if date_str is None:
-        date_str = datetime.now(timezone.utc).strftime("%B %d, %Y")
+        date_str = datetime.now(UTC).strftime("%B %d, %Y")
 
-    subject = f"PodDistill Digest — {date_str}"
-    text_body, html_body = _build_email_body(episodes)
-
-    payload = {
-        "to": [recipient],
-        "subject": subject,
-        "text": text_body,
-        "html": html_body,
-    }
+    subject = f"\U0001f3a4 PodDistill \u2014 {date_str}"
+    text_body, html_body = _build_email_body(episodes, date_str)
 
     url = f"{AGENTMAIL_API_BASE}/inboxes/{inbox}/messages/send"
     log.info("Sending digest to %s via %s (%d episodes)", recipient, inbox, len(episodes))
@@ -192,20 +192,15 @@ def send_digest(
     try:
         resp = requests.post(
             url,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"to": [recipient], "subject": subject, "text": text_body, "html": html_body},
             timeout=30,
         )
     except Exception as e:
         raise DigestError(f"AgentMail request failed: {e}") from e
 
     if resp.status_code not in (200, 201, 202):
-        raise DigestError(
-            f"AgentMail returned {resp.status_code}: {resp.text[:300]}"
-        )
+        raise DigestError(f"AgentMail returned {resp.status_code}: {resp.text[:300]}")
 
     log.info("Digest sent (status %d)", resp.status_code)
     return True

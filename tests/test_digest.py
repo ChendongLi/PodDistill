@@ -5,6 +5,7 @@ Levels:
   - Unit        — _md_to_html, _build_email_body
   - Integration — mocked HTTP for send_digest
 """
+
 from __future__ import annotations
 
 import sys
@@ -21,43 +22,50 @@ from poddistill.email.digest import (
     send_digest,
 )
 
-
 # ---------------------------------------------------------------------------
 # Unit tests — _md_to_html
 # ---------------------------------------------------------------------------
 
+
 def test_md_to_html_heading():
     html = _md_to_html("## Hello World")
-    assert "<h2>Hello World</h2>" in html
+    assert "Hello World" in html and "<h2" in html
+
 
 def test_md_to_html_bullet_list():
     html = _md_to_html("- Point 1\n- Point 2")
-    assert "<ul>" in html
-    assert "<li>Point 1</li>" in html
-    assert "<li>Point 2</li>" in html
+    assert "<ul" in html
+    assert "Point 1" in html
+    assert "Point 2" in html
     assert "</ul>" in html
+
 
 def test_md_to_html_bold():
     html = _md_to_html("This is **bold** text")
     assert "<strong>bold</strong>" in html
 
+
 def test_md_to_html_italic():
     html = _md_to_html("This is *italic* text")
     assert "<em>italic</em>" in html
+
 
 def test_md_to_html_link():
     html = _md_to_html("[Click here](https://example.com)")
     assert 'href="https://example.com"' in html
     assert ">Click here<" in html
 
+
 def test_md_to_html_blockquote():
     html = _md_to_html("> Notable quote here")
     assert "Notable quote here" in html
-    assert "<blockquote>" in html
+    assert "<blockquote" in html
+
 
 def test_md_to_html_hr():
     html = _md_to_html("---")
-    assert "<hr>" in html
+    assert "<hr" in html
+
 
 def test_md_to_html_empty():
     assert _md_to_html("") == ""
@@ -67,34 +75,62 @@ def test_md_to_html_empty():
 # Unit tests — _build_email_body
 # ---------------------------------------------------------------------------
 
+
 def test_build_email_body_includes_podcast_name():
-    episodes = [{"podcast_name": "Lex Fridman", "episode_title": "Ep 400", "video_id": "abc", "summary_md": "Summary"}]
-    text, html = _build_email_body(episodes)
+    episodes = [
+        {
+            "podcast_name": "Lex Fridman",
+            "episode_title": "Ep 400",
+            "video_id": "abc",
+            "summary_md": "Summary",
+        }
+    ]
+    text, html = _build_email_body(episodes, "March 19, 2026")
     assert "Lex Fridman" in text
     assert "Lex Fridman" in html
 
+
 def test_build_email_body_includes_youtube_link():
-    episodes = [{"podcast_name": "Pod", "episode_title": "Ep 1", "video_id": "dQw4w9WgXcQ", "summary_md": ""}]
-    text, html = _build_email_body(episodes)
+    episodes = [
+        {
+            "podcast_name": "Pod",
+            "episode_title": "Ep 1",
+            "video_id": "dQw4w9WgXcQ",
+            "summary_md": "",
+        }
+    ]
+    text, html = _build_email_body(episodes, "March 19, 2026")
     assert "dQw4w9WgXcQ" in text
     assert "dQw4w9WgXcQ" in html
 
+
 def test_build_email_body_html_structure():
-    episodes = [{"podcast_name": "Pod", "episode_title": "Ep 1", "video_id": "vid", "summary_md": "## Point\n- Bullet"}]
-    _, html = _build_email_body(episodes)
-    assert "<html>" in html
+    episodes = [
+        {
+            "podcast_name": "Pod",
+            "episode_title": "Ep 1",
+            "video_id": "vid",
+            "summary_md": "## Point\n- Bullet",
+        }
+    ]
+    _, html = _build_email_body(episodes, "March 19, 2026")
+    assert "<html" in html
     assert "</html>" in html
-    assert "<body>" in html
+    assert "<body" in html
+
 
 def test_build_email_body_no_video_id():
-    episodes = [{"podcast_name": "Pod", "episode_title": "Ep 1", "video_id": "", "summary_md": "Text"}]
-    text, html = _build_email_body(episodes)
+    episodes = [
+        {"podcast_name": "Pod", "episode_title": "Ep 1", "video_id": "", "summary_md": "Text"}
+    ]
+    text, html = _build_email_body(episodes, "March 19, 2026")
     assert "Text" in text
 
 
 # ---------------------------------------------------------------------------
 # Integration tests — mocked HTTP
 # ---------------------------------------------------------------------------
+
 
 def _make_episodes():
     return [
@@ -129,7 +165,9 @@ def test_send_digest_uses_correct_url():
         mock_resp.status_code = 200
         mock_post.return_value = mock_resp
 
-        send_digest(_make_episodes(), "user@example.com", "fake-key", inbox="agentlens@agentmail.to")
+        send_digest(
+            _make_episodes(), "user@example.com", "fake-key", inbox="agentlens@agentmail.to"
+        )
         call_args = mock_post.call_args
         url = call_args[0][0] if call_args[0] else call_args[1].get("url", "")
         assert "agentlens@agentmail.to" in url or "agentmail.to" in url
@@ -156,7 +194,7 @@ def test_send_digest_api_error_raises():
 
         try:
             send_digest(_make_episodes(), "user@example.com", "bad-key")
-            assert False, "Should raise DigestError"
+            raise AssertionError("Should raise DigestError")
         except DigestError as e:
             assert "403" in str(e)
 
@@ -167,7 +205,7 @@ def test_send_digest_network_error_raises():
 
         try:
             send_digest(_make_episodes(), "user@example.com", "key")
-            assert False, "Should raise DigestError"
+            raise AssertionError("Should raise DigestError")
         except DigestError as e:
             assert "failed" in str(e).lower()
 
