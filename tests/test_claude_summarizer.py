@@ -34,11 +34,6 @@ MINIMAL_PROMPTS = {
         "system": "You are a summarizer.",
         "user_template": "Show: {show_name} ({network})\nTitle: {title}\n{custom_instructions}\n{transcript}",
     },
-    "shows": {
-        "Mad Money": {
-            "custom_instructions": "Focus on stock picks.",
-        },
-    },
 }
 
 
@@ -64,7 +59,6 @@ def test_load_prompts_from_real_file(tmp_path):
     p.write_text(yaml.dump(MINIMAL_PROMPTS))
     result = load_prompts(p)
     assert "default" in result
-    assert "shows" in result
 
 
 def test_load_prompts_missing_file(tmp_path):
@@ -120,13 +114,20 @@ def test_build_prompt_includes_network():
 
 
 def test_build_prompt_per_show_custom_instructions():
-    system, user = build_prompt("Title", "text", show_name="Mad Money", prompts=MINIMAL_PROMPTS)
+    # custom_instructions now passed directly, not looked up by show name
+    system, user = build_prompt(
+        "Title",
+        "text",
+        show_name="Mad Money",
+        custom_instructions="Focus on stock picks.",
+        prompts=MINIMAL_PROMPTS,
+    )
     assert "stock picks" in user
 
 
 def test_build_prompt_no_custom_instructions_for_unknown_show():
+    # No custom_instructions -> empty string, no error
     system, user = build_prompt("Title", "text", show_name="Unknown Show", prompts=MINIMAL_PROMPTS)
-    # Should not raise; custom_instructions should be empty
     assert "Unknown Show" in user
 
 
@@ -225,6 +226,7 @@ def test_summarize_chunks_per_show_instructions_injected():
             chunks,
             api_key="sk-fake",
             show_name="Mad Money",
+            custom_instructions="Focus on stock picks.",
             prompts=MINIMAL_PROMPTS,
         )
         payload = mock_post.call_args[1]["json"]

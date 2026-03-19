@@ -1,26 +1,51 @@
 # PodDistill — Podcast Registry
 # Fields:
-#   name        — display name
-#   network     — publisher name
-#   playlist_id — YouTube playlist ID; picks the most recent video from the playlist
+#   name                 — display name
+#   network              — publisher name
+#   playlist_id          — YouTube playlist ID; picks the most recent video
+#   custom_instructions  — per-show guidance injected into the Claude prompt
+#                          as {custom_instructions}. Edit freely — no code change needed.
 
 podcasts:
   # ── Bloomberg ────────────────────────────────────────────────────────────────
   - name: Bloomberg Businessweek
     network: Bloomberg
     playlist_id: PLe4PRejZgr0NDtGW4nghKtCxl6SCdFJfq
+    custom_instructions: |
+      Additional focus for Bloomberg Businessweek:
+      - Prioritise macro signals: Fed, rates, inflation, growth
+      - Surface any data points or economic indicators cited
+      - Note if the episode is a live reaction vs a pre-recorded analysis
 
   # ── Goldman Sachs ─────────────────────────────────────────────────────────────
   - name: Goldman Sachs The Markets
     network: Goldman Sachs
     playlist_id: PLIyiGQywEp648INOomghD8aulpb5dS6zz
+    custom_instructions: |
+      Additional focus for Goldman Sachs The Markets:
+      - Focus on GS positioning and trade recommendations
+      - Extract any specific price targets or spread levels
+      - Note the asset classes covered (equities, credit, rates, FX, commodities)
+      - Flag any divergence from consensus view
 
   # ── Morgan Stanley ────────────────────────────────────────────────────────────
   - name: Morgan Stanley Thoughts on the Market
     network: Morgan Stanley
     playlist_id: PLMUnYeeTvzNsu5Z2B17k_VlzOPnB45A1n
+    custom_instructions: |
+      Additional focus for Morgan Stanley Thoughts on the Market:
+      - Identify the macro theme being argued
+      - Extract any sector or regional calls
+      - Note the host and any guest perspectives if present
+      - Flag forward-looking indicators or leading signals cited
 
   # ── CNBC ──────────────────────────────────────────────────────────────────────
   - name: Mad Money
     network: CNBC
     playlist_id: PLVbP054jv0KoZTJ1dUe3igU7K-wUcQsCI
+    custom_instructions: |
+      Additional focus for Mad Money:
+      - Extract every stock pick with its buy/sell/hold call
+      - Note Cramer's conviction level (enthusiastic vs cautious)
+      - Flag any sector themes he's pushing this episode
+      - Lightning Round picks should each appear as a bullet
