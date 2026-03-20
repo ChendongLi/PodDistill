@@ -294,7 +294,7 @@ def _parse_duration(dur_text: str) -> int | None:
 def _parse_segments(raw: list[dict]) -> list[TranscriptSegment]:
     """Convert raw API segment dicts to TranscriptSegment objects.
 
-    TranscriptAPI.com returns offset in milliseconds.
+    TranscriptAPI.com returns start time in seconds (float).
     """
     segments = []
     for item in raw:
@@ -303,7 +303,8 @@ def _parse_segments(raw: list[dict]) -> list[TranscriptSegment]:
         text = item.get("text", "").strip()
         if not text:
             continue
-        offset_ms = item.get("offset", item.get("start", 0))
-        offset_sec = float(offset_ms) / 1000.0 if isinstance(offset_ms, int | float) else 0.0
+        # API returns seconds; "offset" key used by some older responses
+        raw_start = item.get("start", item.get("offset", 0))
+        offset_sec = float(raw_start) if isinstance(raw_start, int | float) else 0.0
         segments.append(TranscriptSegment(text=text, offset_seconds=offset_sec))
     return segments
