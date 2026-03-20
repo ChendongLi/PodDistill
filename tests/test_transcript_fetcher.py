@@ -36,12 +36,12 @@ def test_parse_duration_invalid_returns_none():
 
 
 def test_parse_segments_basic():
-    raw = [{"text": "Hello world", "offset": 0}, {"text": "Second", "offset": 5000}]
+    raw = [{"text": "Hello world", "offset": 0}, {"text": "Second", "offset": 5}]
     segs = _parse_segments(raw)
     assert len(segs) == 2
     assert segs[0].text == "Hello world"
     assert segs[0].offset_seconds == 0.0
-    assert segs[1].offset_seconds == 5.0  # 5000ms -> 5.0s
+    assert segs[1].offset_seconds == 5.0  # API returns seconds directly
 
 
 def test_parse_segments_skips_empty():
@@ -62,14 +62,14 @@ def test_parse_segments_skips_non_dict():
 
 
 def test_parse_segments_uses_start_fallback():
-    # TranscriptAPI returns all offsets in ms; 10ms = 0.01s
+    # TranscriptAPI returns start in seconds
     raw = [{"text": "hello", "start": 10}]
     segs = _parse_segments(raw)
-    assert segs[0].offset_seconds == 0.01
+    assert segs[0].offset_seconds == 10.0
 
 
-def test_parse_segments_large_offset_treated_as_ms():
-    raw = [{"text": "hi", "offset": 60000}]  # 60000 ms = 60 s
+def test_parse_segments_large_offset_seconds():
+    raw = [{"text": "hi", "offset": 60}]  # 60 seconds
     segs = _parse_segments(raw)
     assert segs[0].offset_seconds == 60.0
 
@@ -185,7 +185,7 @@ def test_find_latest_episode_case_insensitive():
 
 def test_fetch_transcript_success():
     fetcher = _make_fetcher()
-    raw_resp = {"transcript": [{"text": "Hello", "offset": 0}, {"text": "World", "offset": 3000}]}
+    raw_resp = {"transcript": [{"text": "Hello", "offset": 0}, {"text": "World", "offset": 3}]}
     mock_resp = MagicMock()
     mock_resp.json.return_value = raw_resp
     mock_resp.raise_for_status.return_value = None
@@ -193,7 +193,7 @@ def test_fetch_transcript_success():
         segs = fetcher.fetch_transcript("abc123")
         assert len(segs) == 2
         assert segs[0].text == "Hello"
-        assert segs[1].offset_seconds == 3.0  # 3000ms / 1000 = 3.0s  # 3000ms -> 3.0s
+        assert segs[1].offset_seconds == 3.0  # API returns seconds directly
 
 
 def test_fetch_transcript_http_error():

@@ -89,12 +89,57 @@ def _md_to_html(md_text: str) -> str:
     return html
 
 
+def _segment_block(seg: dict, accent: str, vid: str) -> str:
+    """Render a single Claude-identified segment with timestamp deep-link."""
+    seg_title = seg.get("segment_title", "")
+    timestamp_str = seg.get("timestamp_str", "")
+    deep_link = seg.get("deep_link", f"https://youtube.com/watch?v={vid}" if vid else "")
+    tldr = seg.get("tldr", "")
+    bullets = seg.get("bullets", [])
+    tickers = seg.get("tickers", "")
+
+    bullet_html = "".join(
+        f'<li style="margin:3px 0;color:#374151;line-height:1.6;">{b}</li>' for b in bullets
+    )
+
+    ticker_html = ""
+    if tickers and tickers.lower() not in ("none", ""):
+        ticker_html = (
+            f'<p style="margin:8px 0 0;font-size:12px;color:#6b7280;">'
+            f"<strong>Tickers:</strong> {tickers}</p>"
+        )
+
+    jump_btn = ""
+    if deep_link and timestamp_str:
+        jump_btn = (
+            f'<a href="{deep_link}" style="display:inline-block;margin-top:10px;'
+            f"padding:5px 14px;background:{accent}18;color:{accent};border:1px solid {accent}44;"
+            f'text-decoration:none;border-radius:4px;font-size:12px;font-weight:600;">'
+            f"&#9654; Jump to {timestamp_str}</a>"
+        )
+
+    return (
+        f'<div style="margin:14px 0 0;padding:12px 14px;background:#f9fafb;border-radius:6px;'
+        f'border-left:3px solid {accent}88;">'
+        + (
+            f'<p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#1e293b;">{seg_title}</p>'
+            if seg_title
+            else ""
+        )
+        + (f'<p style="margin:0 0 8px;font-size:13px;color:#374151;">{tldr}</p>' if tldr else "")
+        + (f'<ul style="margin:4px 0;padding-left:18px;">{bullet_html}</ul>' if bullet_html else "")
+        + ticker_html
+        + jump_btn
+        + "</div>"
+    )
+
+
 def _episode_card(ep: dict) -> str:
     name = ep.get("podcast_name", "Unknown Podcast")
     title = ep.get("episode_title", "Untitled Episode")
     network = ep.get("network", "")
     vid = ep.get("video_id", "")
-    summary = ep.get("summary_md", "")
+    segments = ep.get("segments", [])
     accent = _network_color(network)
     yt_url = f"https://youtube.com/watch?v={vid}" if vid else ""
 
@@ -110,13 +155,20 @@ def _episode_card(ep: dict) -> str:
 
     watch = (
         (
-            f'<p style="margin:16px 0 0;"><a href="{yt_url}" style="display:inline-block;'
+            f'<p style="margin:20px 0 0;"><a href="{yt_url}" style="display:inline-block;'
             + f"padding:8px 18px;background:{accent};color:#fff;text-decoration:none;"
             + 'border-radius:4px;font-size:13px;font-weight:600;">&#9654; Watch on YouTube</a></p>'
         )
         if yt_url
         else ""
     )
+
+    # Render segments if available, otherwise fall back to legacy summary_md
+    if segments:
+        body = "".join(_segment_block(seg, accent, vid) for seg in segments)
+    else:
+        summary = ep.get("summary_md", "")
+        body = _md_to_html(summary)
 
     return (
         '<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">'
@@ -125,8 +177,8 @@ def _episode_card(ep: dict) -> str:
         + badge
         + f'<h2 style="margin:0 0 2px;font-size:18px;color:#0f3460;">{name}</h2>'
         + f'<p style="margin:0 0 14px;font-size:13px;color:#6b7280;">{title}</p>'
-        + '<hr style="border:none;border-top:1px solid #f3f4f6;margin:0 0 12px;">'
-        + _md_to_html(summary)
+        + '<hr style="border:none;border-top:1px solid #f3f4f6;margin:0 0 4px;">'
+        + body
         + watch
         + "</td></tr></table>"
     )
@@ -134,13 +186,26 @@ def _episode_card(ep: dict) -> str:
 
 def _build_email_body(episodes: list[dict], date_str: str) -> tuple[str, str]:
     # Plain text
-    lines = [f"PodDistill Digest — {date_str}", "=" * 50, ""]
+    lines = [f"PodDistill Digest \u2014 {date_str}", "=" * 50, ""]
     for ep in episodes:
-        lines.append(f"## {ep.get('podcast_name', '')} — {ep.get('episode_title', '')}")
+        lines.append(f"## {ep.get('podcast_name', '')} \u2014 {ep.get('episode_title', '')}")
         if ep.get("video_id"):
             lines.append(f"Watch: https://youtube.com/watch?v={ep['video_id']}")
-        lines += ["", ep.get("summary_md", ""), "\n" + "-" * 40 + "\n"]
-    lines.append("Delivered by PodDistill · Weekdays at 3 PM PT")
+        segs = ep.get("segments", [])
+        if segs:
+            for seg in segs:
+                lines.append(f"\n[{seg.get('timestamp_str', '')}] {seg.get('segment_title', '')}")
+                lines.append(seg.get("tldr", ""))
+                for b in seg.get("bullets", []):
+                    lines.append(f"  - {b}")
+                if seg.get("tickers") and seg["tickers"].lower() != "none":
+                    lines.append(f"  Tickers: {seg['tickers']}")
+                if seg.get("deep_link"):
+                    lines.append(f"  \u25b6 {seg['deep_link']}")
+        else:
+            lines.append(ep.get("summary_md", ""))
+        lines.append("\n" + "-" * 40 + "\n")
+    lines.append("Delivered by PodDistill \u00b7 Weekdays")
 
     cards = "\n".join(_episode_card(ep) for ep in episodes)
     count = len(episodes)

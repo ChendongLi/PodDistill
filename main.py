@@ -32,8 +32,7 @@ from poddistill.fetchers.update_checker import (
     save_state,
 )
 from poddistill.storage.gcs import StorageError, episode_gcs_paths, upload_to_gcs
-from poddistill.summarizer.claude_summarizer import SummarizerError, summarize_chunks
-from poddistill.summarizer.formatter import format_summary_with_links
+from poddistill.summarizer.claude_summarizer import SummarizerError, summarize_episode
 
 load_dotenv()
 
@@ -137,20 +136,14 @@ def process_podcast_transcriptapi(
         max_words=10000,
     )
 
-    # Summarize with Claude
-    chunks = [
-        {
-            "title": ep_title,
-            "text": transcript_text,
-            "startSeconds": 0,
-        }
-    ]
-
+    # Summarize with Claude — Claude segments by topic, returns deep-linked JSON
     custom_instructions = podcast.get("custom_instructions", "") or ""
 
     try:
-        summarized = summarize_chunks(
-            chunks,
+        segments_summary = summarize_episode(
+            title=ep_title,
+            transcript=transcript_text,
+            video_id=video_id,
             api_key=anthropic_api_key,
             show_name=name,
             network=network,
@@ -160,15 +153,20 @@ def process_podcast_transcriptapi(
         log.error("[%s] Summarization failed: %s", name, e)
         return None
 
-    final_markdown = format_summary_with_links(summarized, video_id)
-
     # GCS upload (optional)
     if gcs_bucket:
         date_str = datetime.now(UTC).strftime("%Y-%m-%d")
         slug = name.lower().replace(" ", "-").replace("/", "-")
         paths = episode_gcs_paths(date_str, slug, video_id)
         try:
-            upload_to_gcs(gcs_bucket, paths["summary"], final_markdown, "text/markdown")
+            import json as _json
+
+            upload_to_gcs(
+                gcs_bucket,
+                paths["summary"],
+                _json.dumps(segments_summary, indent=2),
+                "application/json",
+            )
             log.info("[%s] Uploaded summary to GCS", name)
         except StorageError as e:
             log.warning("[%s] GCS upload failed (non-fatal): %s", name, e)
@@ -180,7 +178,7 @@ def process_podcast_transcriptapi(
         "network": network,
         "episode_title": ep_title,
         "video_id": video_id,
-        "summary_md": final_markdown,
+        "segments": segments_summary,
     }
 
 

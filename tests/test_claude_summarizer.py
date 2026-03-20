@@ -20,9 +20,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from poddistill.summarizer.claude_summarizer import (
     SummarizerError,
     _call_claude,
+    _parse_segments_json,
     build_prompt,
     load_prompts,
     summarize_chunks,
+    summarize_episode,
 )
 
 # ---------------------------------------------------------------------------
@@ -258,3 +260,143 @@ def test_summarize_chunks_preserves_metadata():
 def test_summarize_chunks_empty_list():
     results = summarize_chunks([], api_key="sk-fake", prompts=MINIMAL_PROMPTS)
     assert results == []
+
+
+# ---------------------------------------------------------------------------
+# Unit tests -- _parse_segments_json
+# ---------------------------------------------------------------------------
+
+
+def test_parse_segments_json_valid():
+    raw = """[
+      {"segment_title": "Intro", "start_seconds": 0, "tldr": "Overview.", "bullets": ["Point A"], "tickers": "AAPL"},
+      {"segment_title": "Deep Dive", "start_seconds": 300, "tldr": "Analysis.", "bullets": ["Point B"], "tickers": "None"}
+    ]"""
+    segs = _parse_segments_json(raw)
+    assert len(segs) == 2
+    assert segs[0]["segment_title"] == "Intro"
+    assert segs[1]["start_seconds"] == 300
+
+
+def test_parse_segments_json_strips_code_fence():
+    raw = '```json\n[{"segment_title":"X","start_seconds":0,"tldr":"T","bullets":[],"tickers":"None"}]\n```'
+    segs = _parse_segments_json(raw)
+    assert len(segs) == 1
+    assert segs[0]["segment_title"] == "X"
+
+
+def test_parse_segments_json_invalid_json():
+    with pytest.raises(SummarizerError, match="invalid JSON"):
+        _parse_segments_json("not json at all")
+
+
+def test_parse_segments_json_not_array():
+    with pytest.raises(SummarizerError, match="Expected JSON array"):
+        _parse_segments_json('{"key": "value"}')
+
+
+def test_parse_segments_json_empty_array():
+    with pytest.raises(SummarizerError, match="empty"):
+        _parse_segments_json("[]")
+
+
+# ---------------------------------------------------------------------------
+# Unit tests -- format_timestamp / make_deep_link
+# ---------------------------------------------------------------------------
+
+
+def test_format_timestamp_seconds():
+    from poddistill.summarizer.claude_summarizer import format_timestamp
+
+    assert format_timestamp(0) == "0:00"
+    assert format_timestamp(90) == "1:30"
+    assert format_timestamp(3661) == "1:01:01"
+
+
+def test_make_deep_link():
+    from poddistill.summarizer.claude_summarizer import make_deep_link
+
+    assert make_deep_link("abc123", 272) == "https://www.youtube.com/watch?v=abc123&t=272s"
+
+
+# ---------------------------------------------------------------------------
+# Integration tests -- summarize_episode
+# ---------------------------------------------------------------------------
+
+SAMPLE_SEGMENTS_JSON = """[
+  {
+    "segment_title": "Market Overview",
+    "start_seconds": 0,
+    "tldr": "Markets moved higher.",
+    "bullets": ["S&P up 1%", "Bonds flat"],
+    "tickers": "SPY, TLT"
+  },
+  {
+    "segment_title": "Fed Commentary",
+    "start_seconds": 420,
+    "tldr": "Powell signals patience.",
+    "bullets": ["No rate cut expected", "Watch CPI"],
+    "tickers": "None"
+  }
+]"""
+
+
+def test_summarize_episode_returns_segments():
+    with patch("poddistill.summarizer.claude_summarizer.requests.post") as mock_post:
+        mock_post.return_value = _make_mock_response(SAMPLE_SEGMENTS_JSON)
+        segs = summarize_episode(
+            title="Test Episode",
+            transcript="[0:00] Hello\n[7:00] World",
+            video_id="vid123",
+            api_key="sk-fake",
+            prompts=MINIMAL_PROMPTS,
+        )
+        assert len(segs) == 2
+        assert segs[0]["segment_title"] == "Market Overview"
+        assert segs[1]["start_seconds"] == 420
+
+
+def test_summarize_episode_attaches_deep_links():
+    with patch("poddistill.summarizer.claude_summarizer.requests.post") as mock_post:
+        mock_post.return_value = _make_mock_response(SAMPLE_SEGMENTS_JSON)
+        segs = summarize_episode(
+            title="Ep",
+            transcript="transcript",
+            video_id="myvid",
+            api_key="sk-fake",
+            prompts=MINIMAL_PROMPTS,
+        )
+        assert "myvid" in segs[0]["deep_link"]
+        assert "t=0s" in segs[0]["deep_link"]
+        assert "t=420s" in segs[1]["deep_link"]
+
+
+def test_summarize_episode_attaches_timestamp_str():
+    with patch("poddistill.summarizer.claude_summarizer.requests.post") as mock_post:
+        mock_post.return_value = _make_mock_response(SAMPLE_SEGMENTS_JSON)
+        segs = summarize_episode(
+            title="Ep",
+            transcript="text",
+            video_id="vid",
+            api_key="sk-fake",
+            prompts=MINIMAL_PROMPTS,
+        )
+        assert segs[0]["timestamp_str"] == "0:00"
+        assert segs[1]["timestamp_str"] == "7:00"
+
+
+def test_summarize_episode_injects_show_context():
+    with patch("poddistill.summarizer.claude_summarizer.requests.post") as mock_post:
+        mock_post.return_value = _make_mock_response(SAMPLE_SEGMENTS_JSON)
+        summarize_episode(
+            title="Ep",
+            transcript="text",
+            video_id="vid",
+            api_key="sk-fake",
+            show_name="Mad Money",
+            network="CNBC",
+            prompts=MINIMAL_PROMPTS,
+        )
+        payload = mock_post.call_args[1]["json"]
+        assert "Mad Money" in payload["messages"][0]["content"]
+        assert "CNBC" in payload["messages"][0]["content"]

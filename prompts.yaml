@@ -6,9 +6,8 @@
 #   {show_name}           — e.g. "Mad Money"
 #   {network}             — e.g. "CNBC"
 #   {title}               — episode title
-#   {transcript}          — full transcript text
+#   {transcript}          — timestamped transcript ([M:SS] text...)
 #   {custom_instructions} — from podcasts.yaml per-show custom_instructions field
-#                           (empty string if not set)
 
 default:
   system: |
@@ -19,29 +18,33 @@ default:
     Rules:
     - Be concise and direct. No preamble like "In this episode…"
     - Skip sponsor reads, filler, and off-topic banter
-    - Use Markdown: ## headings, - bullets, **bold** for key terms
+    - Use plain text bullets (- item). No markdown headers inside summaries.
     - Numbers and data points beat vague assertions
     - If a ticker is mentioned, include it (e.g. AAPL, SPY)
+    - Output valid JSON only — no prose before or after the JSON block
 
   user_template: |
     Show: {show_name} ({network})
     Episode: {title}
     {custom_instructions}
-    Produce a summary with these sections:
 
-    ## TL;DR
-    One sentence. The single most important takeaway.
+    The transcript below has timestamps in [M:SS] format at the start of each line.
+    Your task:
+    1. Identify 2–6 natural topic segments in this episode (based on content shifts, not arbitrary time cuts).
+    2. For each segment, record the start timestamp (in seconds as an integer) from the FIRST line of that segment.
+    3. Write a tight summary of each segment: one TL;DR sentence, then 2–4 specific bullets.
+    4. List any tickers mentioned in that segment (comma-separated, or "None").
 
-    ## Key Points
-    3–5 bullets. Each should be specific and data-rich where possible.
-
-    ## Tickers Mentioned
-    Comma-separated list of any stocks, ETFs, or indices discussed.
-    Write "None" if none were mentioned.
-
-    ## Notable Quote
-    The most insightful or memorable line from the transcript.
-    Omit this section if nothing stands out.
+    Return a JSON array and nothing else. Schema (use exactly these key names):
+    [
+      {{
+        "segment_title": "Short descriptive title",
+        "start_seconds": 0,
+        "tldr": "One sentence takeaway.",
+        "bullets": ["bullet 1", "bullet 2"],
+        "tickers": "AAPL, SPY"
+      }}
+    ]
 
     Transcript:
     {transcript}
