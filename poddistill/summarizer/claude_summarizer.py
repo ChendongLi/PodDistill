@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_API_VERSION = "2023-06-01"
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
-MAX_TOKENS = 2048
+MAX_TOKENS = 4096
 
 DEFAULT_PROMPTS_FILE = Path(__file__).parent.parent.parent / "prompts.yaml"
 
@@ -97,6 +97,9 @@ def _call_claude(
     if resp.status_code != 200:
         raise SummarizerError(f"Anthropic API returned {resp.status_code}: {resp.text[:300]}")
     data = resp.json()
+    stop_reason = data.get("stop_reason", "")
+    if stop_reason == "max_tokens":
+        log.warning("Claude hit max_tokens limit — response may be truncated")
     content_blocks = data.get("content", [])
     if not content_blocks:
         raise SummarizerError("Anthropic API returned empty content")
@@ -104,7 +107,27 @@ def _call_claude(
     result = "\n".join(text_blocks).strip()
     if not result:
         raise SummarizerError("Anthropic API returned no text content")
+    if stop_reason == "max_tokens" and result:
+        # Attempt to salvage truncated JSON by closing open structures
+        result = _repair_truncated_json(result)
     return result
+
+
+def _repair_truncated_json(text: str) -> str:
+    """Best-effort repair of a JSON array truncated by max_tokens."""
+    text = text.strip()
+    # Strip markdown fences
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text).strip()
+    # Find the last complete object (ends with })
+    last_brace = text.rfind("}")
+    if last_brace == -1:
+        return text
+    truncated = text[: last_brace + 1]
+    # Ensure it closes as a valid JSON array
+    if not truncated.rstrip().endswith("]"):
+        truncated = truncated.rstrip().rstrip(",") + "\n]"
+    return truncated
 
 
 def _parse_segments_json(raw_text: str) -> list[dict]:
